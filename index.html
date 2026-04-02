@@ -465,6 +465,7 @@
     .layer-top {
       display: flex;
       align-items: center;
+      flex-wrap: wrap;
       gap: 8px;
     }
 
@@ -687,7 +688,7 @@
     }
 
     .modal-card {
-      width: min(560px, calc(100vw - 32px));
+      width: min(1080px, calc(100vw - 32px));
       max-height: calc(100vh - 32px);
       overflow: auto;
       border-radius: 16px;
@@ -719,6 +720,101 @@
       justify-content: flex-end;
       gap: 8px;
       flex-wrap: wrap;
+    }
+
+    .table-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .table-shell {
+      border: 1px solid rgba(219, 235, 242, 0.18);
+      border-radius: 12px;
+      overflow: auto;
+      background: rgba(8, 17, 23, 0.68);
+    }
+
+    .attr-table {
+      width: 100%;
+      min-width: 860px;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .attr-table th,
+    .attr-table td {
+      padding: 9px 10px;
+      border-bottom: 1px solid rgba(219, 235, 242, 0.1);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .attr-table th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: rgba(12, 24, 32, 0.98);
+      color: #d9e7ee;
+      text-transform: uppercase;
+      letter-spacing: 0.35px;
+      font: 700 11px/1.1 var(--mono);
+    }
+
+    .attr-table tr:nth-child(even) td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .attr-input {
+      min-width: 120px;
+      padding: 8px 9px;
+      font: 600 12px/1.1 var(--sans);
+    }
+
+    .cell-fixed {
+      white-space: nowrap;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 9px;
+      border-radius: 999px;
+      border: 1px solid rgba(219, 235, 242, 0.18);
+      background: rgba(17, 30, 40, 0.86);
+      color: #dceaf0;
+      font: 700 11px/1 var(--mono);
+      text-transform: uppercase;
+      letter-spacing: 0.25px;
+    }
+
+    .symbology-preview {
+      min-height: 84px;
+      border-radius: 12px;
+      border: 1px solid rgba(219, 235, 242, 0.18);
+      background:
+        radial-gradient(circle at 18% 25%, rgba(143, 247, 219, 0.1), transparent 32%),
+        linear-gradient(145deg, rgba(12, 22, 29, 0.95), rgba(21, 36, 49, 0.95));
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+    }
+
+    .symbology-preview-swatch {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 120px;
+      min-height: 40px;
+      border-radius: 999px;
+      box-shadow: 0 14px 28px rgba(0, 0, 0, 0.24);
+    }
+
+    .note-grid {
+      display: grid;
+      gap: 6px;
     }
 
     .fab-wrap {
@@ -1029,6 +1125,10 @@
             <button class="btn" id="filterBtn"><i class="fa-solid fa-filter"></i> Attribute Filter</button>
             <button class="btn" id="heatBtn"><i class="fa-solid fa-fire"></i> Heatmap</button>
           </div>
+          <div class="row">
+            <button class="btn" id="attributeTableBtn"><i class="fa-solid fa-table-list"></i> Attribute Table</button>
+            <button class="btn" id="fieldManagerBtn"><i class="fa-solid fa-table-columns"></i> Manage Fields</button>
+          </div>
           <input id="geoInput" type="file" accept=".geojson,.json,.kml,.gpx" hidden />
           <input id="csvInput" type="file" accept=".csv" hidden />
           <input id="shpInput" type="file" accept=".zip,.shp" hidden />
@@ -1086,6 +1186,14 @@
             <button class="btn" id="gpRotateBtn"><i class="fa-solid fa-rotate"></i> Rotate</button>
             <button class="btn" id="gpScaleBtn"><i class="fa-solid fa-expand"></i> Scale</button>
           </div>
+          <div class="row">
+            <button class="btn" id="gpDissolveFieldBtn"><i class="fa-solid fa-diagram-project"></i> Dissolve Field</button>
+            <button class="btn" id="gpClipBtn"><i class="fa-solid fa-crop-simple"></i> Clip by Polygon</button>
+          </div>
+          <div class="row">
+            <button class="btn" id="gpCountBtn"><i class="fa-solid fa-hashtag"></i> Count Points</button>
+            <button class="btn" id="gpHexBtn"><i class="fa-solid fa-table-cells-large"></i> Hex Grid</button>
+          </div>
         </section>
 
         <section class="block">
@@ -1113,6 +1221,10 @@
           <div class="row">
             <button class="btn" id="newGroupBtn"><i class="fa-solid fa-folder-plus"></i> Group Folder</button>
             <button class="btn" id="clearHeatBtn"><i class="fa-solid fa-temperature-empty"></i> Clear Heat</button>
+          </div>
+          <div class="row">
+            <button class="btn" id="layerTableBtn"><i class="fa-solid fa-table-list"></i> Open Table</button>
+            <button class="btn" id="layerFieldsBtn"><i class="fa-solid fa-sliders"></i> Schema Tools</button>
           </div>
           <div class="target-grid" id="featureTargetBlock">
             <label>Point Target
@@ -1207,7 +1319,8 @@
       panelOpen: false,
       pendingImageUrl: null,
       toolState: null,
-      toolPoints: []
+      toolPoints: [],
+      featureSeq: 0
     };
 
     const ui = {
@@ -1242,6 +1355,138 @@
       modalBody: document.getElementById("modalBody"),
       modalActions: document.getElementById("modalActions")
     };
+
+    const INTERNAL_FIELD_PREFIX = "__mapdash_";
+    const INTERNAL_FIELD_ID = `${INTERNAL_FIELD_PREFIX}id`;
+    const META_FIELDS = ["name", "group", "kind"];
+
+    function cloneJson(value) {
+      return value == null ? value : JSON.parse(JSON.stringify(value));
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        "\"": "&quot;",
+        "'": "&#39;"
+      }[char] || char));
+    }
+
+    function generateFeatureId() {
+      state.featureSeq += 1;
+      return `feature-${Date.now().toString(36)}-${state.featureSeq.toString(36)}`;
+    }
+
+    function isFeatureLayer(layer) {
+      return !!(layer && typeof layer.toGeoJSON === "function");
+    }
+
+    function ensureLayerFeature(layer) {
+      if (!isFeatureLayer(layer)) return null;
+      if (!layer.feature || layer.feature.type !== "Feature") {
+        layer.feature = {
+          type: "Feature",
+          properties: {}
+        };
+      }
+      if (!layer.feature.properties || typeof layer.feature.properties !== "object") {
+        layer.feature.properties = {};
+      }
+      return layer.feature;
+    }
+
+    function ensureLayerProperties(layer) {
+      const feature = ensureLayerFeature(layer);
+      return feature ? feature.properties : {};
+    }
+
+    function layerKey(layer) {
+      if (!layer) return null;
+      if (layer._mapdashId) return layer._mapdashId;
+      const feature = ensureLayerFeature(layer);
+      const existing = feature && feature.properties ? feature.properties[INTERNAL_FIELD_ID] : null;
+      layer._mapdashId = existing || generateFeatureId();
+      if (feature) feature.properties[INTERNAL_FIELD_ID] = layer._mapdashId;
+      return layer._mapdashId;
+    }
+
+    function findLayerById(id) {
+      return state.drawn.getLayers().find((layer) => layerKey(layer) === id) || null;
+    }
+
+    function getLayerMeta(layer) {
+      return state.layerMeta[layerKey(layer)] || null;
+    }
+
+    function isSystemField(field) {
+      return String(field || "").startsWith(INTERNAL_FIELD_PREFIX);
+    }
+
+    function ensureGroupExists(name) {
+      const group = safeName(name, "Default");
+      if (!state.groups.includes(group)) state.groups.push(group);
+      return group;
+    }
+
+    function publicPropertyEntries(layer) {
+      return Object.entries(ensureLayerProperties(layer)).filter(([field]) => !isSystemField(field) && !META_FIELDS.includes(field));
+    }
+
+    function publicPropertyKeys(layers) {
+      const keys = new Set();
+      layers.forEach((layer) => {
+        publicPropertyEntries(layer).forEach(([field]) => keys.add(field));
+      });
+      return Array.from(keys).sort((a, b) => a.localeCompare(b));
+    }
+
+    function layersInScope(scope = "all") {
+      return state.drawn.getLayers().filter((layer) => {
+        if (!isFeatureLayer(layer)) return false;
+        if (scope === "all") return true;
+        const meta = getLayerMeta(layer);
+        return meta && meta.group === scope;
+      });
+    }
+
+    function typedValueFromInput(type, raw) {
+      const text = String(raw ?? "").trim();
+      if (type === "number") {
+        const value = Number(text);
+        return Number.isFinite(value) ? value : 0;
+      }
+      if (type === "boolean") {
+        return text.toLowerCase() === "true" || text === "1" || text.toLowerCase() === "yes";
+      }
+      return text;
+    }
+
+    function coerceAttributeValue(raw, existingValue) {
+      if (typeof existingValue === "number") {
+        const num = Number(raw);
+        return Number.isFinite(num) ? num : existingValue;
+      }
+      if (typeof existingValue === "boolean") {
+        const txt = String(raw ?? "").trim().toLowerCase();
+        if (["true", "1", "yes"].includes(txt)) return true;
+        if (["false", "0", "no"].includes(txt)) return false;
+        return existingValue;
+      }
+      return String(raw ?? "");
+    }
+
+    function detectCoordinateField(fields, candidates) {
+      const lower = fields.reduce((acc, field) => {
+        acc[String(field).toLowerCase().trim()] = field;
+        return acc;
+      }, {});
+      for (const candidate of candidates) {
+        if (lower[candidate]) return lower[candidate];
+      }
+      return null;
+    }
 
     function setPanel(open) {
       state.panelOpen = open;
@@ -1397,6 +1642,9 @@
     function addCenterPin() {
       const c = state.map.getCenter();
       const marker = L.marker(c).addTo(state.drawn);
+      const props = ensureLayerProperties(marker);
+      props.latitude = Number(c.lat.toFixed(6));
+      props.longitude = Number(c.lng.toFixed(6));
       registerLayer(marker, `Center Pin ${c.lat.toFixed(4)}, ${c.lng.toFixed(4)}`);
       snapshot();
       refreshLayers();
@@ -1567,6 +1815,7 @@
     function layerTypeName(layer) {
       if (layer instanceof L.Marker) return "Marker";
       if (layer instanceof L.Circle) return "Circle";
+      if (layer instanceof L.CircleMarker) return "Circle Marker";
       if (layer instanceof L.Rectangle) return "Rectangle";
       if (layer instanceof L.Polygon) return "Polygon";
       if (layer instanceof L.Polyline) return "Polyline";
@@ -1593,8 +1842,8 @@
     }
 
     function layerBucket(layer) {
-      if (layer instanceof L.Marker || layer instanceof L.CircleMarker) return "point";
       if (layer instanceof L.Circle || layer instanceof L.Polygon || layer instanceof L.Rectangle) return "polygon";
+      if (layer instanceof L.Marker || layer instanceof L.CircleMarker) return "point";
       if (layer instanceof L.Polyline) return "line";
 
       if (layer.toGeoJSON) {
@@ -1640,28 +1889,260 @@
       }
     }
 
-    function registerLayer(layer, name) {
-      const id = L.stamp(layer);
-      if (!state.layerMeta[id]) {
-        state.layerMeta[id] = {
-          name: safeName(name, `${layerTypeName(layer)} ${Object.keys(state.layerMeta).length + 1}`),
-          visible: true,
-          opacity: 1,
-          group: targetGroupForLayer(layer),
-          kind: layerTypeName(layer),
-          addedAt: new Date().toISOString()
-        };
-      } else {
-        if (!state.layerMeta[id].group) state.layerMeta[id].group = targetGroupForLayer(layer);
-        if (!state.layerMeta[id].kind) state.layerMeta[id].kind = layerTypeName(layer);
-        if (!state.layerMeta[id].addedAt) state.layerMeta[id].addedAt = new Date().toISOString();
+    function styleKindForLayer(layer) {
+      if (layer instanceof L.Marker) return "marker";
+      if (layer instanceof L.Circle) return "circle";
+      if (layer instanceof L.CircleMarker) return "circle-marker";
+      if (layer instanceof L.Polygon || layer instanceof L.Rectangle) return "polygon";
+      if (layer instanceof L.Polyline) return "line";
+      if (layer instanceof L.ImageOverlay) return "image";
+      return "other";
+    }
+
+    function defaultStyleForLayer(layer) {
+      const kind = styleKindForLayer(layer);
+      if (kind === "marker") {
+        return { markerShape: "pin", color: "#44d2a8", strokeColor: "#072018", size: 28, opacity: 1 };
+      }
+      if (kind === "circle-marker") {
+        return { color: "#44d2a8", fillColor: "#44d2a8", weight: 2, opacity: 1, fillOpacity: 0.8, radius: 8, dashArray: "" };
+      }
+      if (kind === "line") {
+        return { color: "#44d2a8", weight: 3, opacity: 0.9, dashArray: "" };
+      }
+      if (kind === "polygon" || kind === "circle") {
+        return { color: "#44d2a8", fillColor: "#44d2a8", weight: 2, opacity: 1, fillOpacity: 0.22, dashArray: "" };
+      }
+      return { opacity: 1 };
+    }
+
+    function readLayerStyle(layer) {
+      const base = defaultStyleForLayer(layer);
+      if (layer instanceof L.Marker) {
+        const icon = layer.options && layer.options.icon && layer.options.icon.options ? layer.options.icon.options : null;
+        if (icon && icon.html) {
+          return {
+            ...base,
+            markerShape: "custom",
+            customHtml: icon.html,
+            iconSize: icon.iconSize || null,
+            iconAnchor: icon.iconAnchor || null,
+            popupAnchor: icon.popupAnchor || null
+          };
+        }
+        return base;
+      }
+      if (!layer.options) return base;
+
+      if (layer.options.color) base.color = layer.options.color;
+      if (layer.options.fillColor) base.fillColor = layer.options.fillColor;
+      if (Number.isFinite(layer.options.weight)) base.weight = layer.options.weight;
+      if (Number.isFinite(layer.options.opacity)) base.opacity = layer.options.opacity;
+      if (Number.isFinite(layer.options.fillOpacity)) base.fillOpacity = layer.options.fillOpacity;
+      if (Number.isFinite(layer.options.radius)) base.radius = layer.options.radius;
+      if (layer.options.dashArray != null) base.dashArray = layer.options.dashArray;
+      return base;
+    }
+
+    function buildMarkerIcon(style) {
+      const size = Math.max(18, Number(style.size) || 28);
+      const color = style.color || "#44d2a8";
+      const stroke = style.strokeColor || "#072018";
+      const opacity = Math.max(0.1, Math.min(1, Number(style.opacity) || 1));
+      const inner = Math.max(6, Math.round(size * 0.32));
+
+      const html = style.markerShape === "dot"
+        ? `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};border:2px solid ${stroke};opacity:${opacity};box-shadow:0 10px 24px rgba(0,0,0,0.22)"></div>`
+        : `
+          <div style="position:relative;width:${size}px;height:${size}px;opacity:${opacity}">
+            <div style="position:absolute;inset:0;background:${color};border:2px solid ${stroke};border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 12px 24px rgba(0,0,0,0.24)"></div>
+            <div style="position:absolute;left:50%;top:34%;transform:translate(-50%,-50%);width:${inner}px;height:${inner}px;border-radius:50%;background:rgba(255,255,255,0.82)"></div>
+          </div>
+        `;
+
+      return L.divIcon({
+        className: "",
+        html,
+        iconSize: [size, size],
+        iconAnchor: [Math.round(size / 2), size],
+        popupAnchor: [0, -Math.round(size * 0.8)]
+      });
+    }
+
+    function applyLayerVisibility(layer, visible) {
+      const meta = getLayerMeta(layer);
+      if (meta) meta.visible = visible;
+      if (visible) layer.addTo(state.map);
+      else layer.removeFrom(state.map);
+    }
+
+    function applyLayerSymbology(layer, styleInput, options = {}) {
+      const meta = getLayerMeta(layer);
+      const style = {
+        ...readLayerStyle(layer),
+        ...(meta && meta.style ? meta.style : {}),
+        ...(styleInput || {})
+      };
+      const kind = styleKindForLayer(layer);
+
+      if (kind === "marker") {
+        if (style.markerShape === "custom" && style.customHtml) {
+          layer.setIcon(L.divIcon({
+            className: "",
+            html: style.customHtml,
+            iconSize: style.iconSize || null,
+            iconAnchor: style.iconAnchor || undefined,
+            popupAnchor: style.popupAnchor || undefined
+          }));
+        } else {
+          layer.setIcon(buildMarkerIcon(style));
+        }
+        if (layer.setOpacity) layer.setOpacity(style.opacity ?? 1);
+      } else if (kind === "circle-marker") {
+        if (Number.isFinite(style.radius) && layer.setRadius) layer.setRadius(style.radius);
+        if (layer.setStyle) {
+          layer.setStyle({
+            color: style.color,
+            fillColor: style.fillColor || style.color,
+            weight: style.weight,
+            opacity: style.opacity,
+            fillOpacity: style.fillOpacity,
+            dashArray: style.dashArray || null
+          });
+        }
+      } else if (kind === "line" || kind === "polygon" || kind === "circle") {
+        if (layer.setStyle) {
+          layer.setStyle({
+            color: style.color,
+            fillColor: style.fillColor || style.color,
+            weight: style.weight,
+            opacity: style.opacity,
+            fillOpacity: style.fillOpacity,
+            dashArray: style.dashArray || null
+          });
+        }
+      } else if (kind === "image" && layer.setOpacity) {
+        layer.setOpacity(style.opacity ?? 1);
       }
 
-      layer.on("click", () => {
-        const meta = state.layerMeta[id] || { name: "Layer" };
-        const popupHtml = `<b>${meta.name}</b><br><small>${meta.kind}</small>`;
-        layer.bindPopup(popupHtml).openPopup();
+      if (meta) {
+        meta.style = cloneJson(style);
+        meta.opacity = Number.isFinite(style.opacity) ? style.opacity : (meta.opacity || 1);
+      }
+      if (options.refresh) refreshLayers();
+      return style;
+    }
+
+    function layerToFeature(layer, options = {}) {
+      if (!isFeatureLayer(layer)) return null;
+      const config = { includeInternal: true, includeMeta: true, ...options };
+      const geo = layer.toGeoJSON();
+      const feature = geo && geo.type === "Feature"
+        ? geo
+        : { type: "Feature", geometry: geo && geo.geometry ? geo.geometry : geo, properties: {} };
+      const props = cloneJson(ensureLayerProperties(layer)) || {};
+      const meta = getLayerMeta(layer);
+
+      if (config.includeMeta && meta) {
+        props.name = meta.name;
+        props.group = meta.group;
+        props.kind = meta.kind;
+      }
+
+      if (config.includeInternal) {
+        props[INTERNAL_FIELD_ID] = layerKey(layer);
+      } else {
+        delete props[INTERNAL_FIELD_ID];
+        Object.keys(props).forEach((field) => {
+          if (isSystemField(field)) delete props[field];
+        });
+      }
+
+      feature.properties = props;
+      return feature;
+    }
+
+    function loadGeoFeatures(geo, meta = {}) {
+      state.drawn.clearLayers();
+      state.layerMeta = {};
+
+      const safeGeo = geo || { type: "FeatureCollection", features: [] };
+      const safeMeta = meta && typeof meta === "object" ? cloneJson(meta) : {};
+
+      L.geoJSON(safeGeo, {
+        pointToLayer: (feature, latlng) => {
+          const featureId = feature && feature.properties ? feature.properties[INTERNAL_FIELD_ID] : null;
+          const incomingMeta = featureId ? safeMeta[featureId] : null;
+          const incomingKind = incomingMeta && incomingMeta.kind ? incomingMeta.kind : (feature.properties && feature.properties.kind);
+          if (incomingKind === "Circle") {
+            return L.circle(latlng, { radius: Number(feature.properties && feature.properties.radius_m) || 500 });
+          }
+          if (incomingKind === "Circle Marker") {
+            return L.circleMarker(latlng, { radius: Number(feature.properties && feature.properties.radius_px) || (incomingMeta.style && incomingMeta.style.radius) || 8 });
+          }
+          return L.marker(latlng);
+        },
+        onEachFeature: (feature, layer) => {
+          layer.feature = cloneJson(feature);
+          const featureId = feature && feature.properties ? feature.properties[INTERNAL_FIELD_ID] : null;
+          if (featureId && safeMeta[featureId]) state.layerMeta[featureId] = safeMeta[featureId];
+          state.drawn.addLayer(layer);
+          registerLayer(layer, feature.properties && feature.properties.name ? feature.properties.name : null);
+          const finalMeta = getLayerMeta(layer);
+          if (finalMeta && finalMeta.group) ensureGroupExists(finalMeta.group);
+          if (finalMeta && finalMeta.style) applyLayerSymbology(layer, finalMeta.style);
+          if (finalMeta && finalMeta.visible === false) applyLayerVisibility(layer, false);
+        }
       });
+    }
+
+    function registerLayer(layer, name) {
+      const id = layerKey(layer);
+      const props = ensureLayerProperties(layer);
+      const suggestedName = safeName(name || props.name, `${layerTypeName(layer)} ${Object.keys(state.layerMeta).length + 1}`);
+      const suggestedGroup = props.group ? ensureGroupExists(props.group) : targetGroupForLayer(layer);
+      const suggestedKind = props.kind || layerTypeName(layer);
+      if (!state.layerMeta[id]) {
+        state.layerMeta[id] = {
+          name: suggestedName,
+          visible: true,
+          opacity: 1,
+          group: suggestedGroup,
+          kind: suggestedKind,
+          addedAt: new Date().toISOString(),
+          style: readLayerStyle(layer)
+        };
+      } else {
+        if (!state.layerMeta[id].name) state.layerMeta[id].name = suggestedName;
+        if (!state.layerMeta[id].group) state.layerMeta[id].group = suggestedGroup;
+        if (!state.layerMeta[id].kind) state.layerMeta[id].kind = suggestedKind;
+        if (!state.layerMeta[id].addedAt) state.layerMeta[id].addedAt = new Date().toISOString();
+        if (!state.layerMeta[id].style) state.layerMeta[id].style = readLayerStyle(layer);
+      }
+
+      props[INTERNAL_FIELD_ID] = id;
+      if (layer instanceof L.Circle && typeof layer.getRadius === "function") props.radius_m = Math.round(layer.getRadius());
+      if (layer instanceof L.CircleMarker && !(layer instanceof L.Circle) && typeof layer.getRadius === "function") props.radius_px = layer.getRadius();
+      ensureGroupExists(state.layerMeta[id].group);
+
+      if (!layer._mapdashPopupBound) {
+        layer._mapdashPopupBound = true;
+        layer.on("click", () => {
+          const meta = state.layerMeta[id] || { name: "Layer", kind: layerTypeName(layer), group: "Default" };
+          const attrs = publicPropertyEntries(layer)
+            .slice(0, 4)
+            .map(([field, value]) => `<div><b>${escapeHtml(field)}</b>: ${escapeHtml(value)}</div>`)
+            .join("");
+          const popupHtml = `
+            <b>${escapeHtml(meta.name)}</b><br>
+            <small>${escapeHtml(meta.kind)} | ${escapeHtml(meta.group || "Default")}</small>
+            ${attrs ? `<div style="margin-top:8px">${attrs}</div>` : ""}
+          `;
+          layer.bindPopup(popupHtml).openPopup();
+        });
+      }
+
+      if (state.layerMeta[id].style) applyLayerSymbology(layer, state.layerMeta[id].style);
     }
 
     function applyDrawStyle() {
@@ -1673,36 +2154,26 @@
     }
 
     function snapshot() {
-      const geo = state.drawn.toGeoJSON();
-      const meta = JSON.stringify(state.layerMeta);
-      state.history.push(JSON.stringify({ geo, meta }));
+      const geo = geoFeatures({ includeInternal: true });
+      const meta = cloneJson(state.layerMeta);
+      state.history.push(JSON.stringify({
+        geo,
+        meta,
+        groups: state.groups,
+        projectName: state.projectName,
+        featureSeq: state.featureSeq
+      }));
       if (state.history.length > 60) state.history.shift();
       state.redo = [];
     }
 
     function restoreState(serialized) {
       const parsed = JSON.parse(serialized);
-      const geo = parsed.geo || { type: "FeatureCollection", features: [] };
-      const meta = parsed.meta ? JSON.parse(parsed.meta) : {};
-
-      state.drawn.clearLayers();
-      state.layerMeta = {};
-
-      L.geoJSON(geo, {
-        pointToLayer: (_, latlng) => L.marker(latlng),
-        onEachFeature: (feature, layer) => {
-          state.drawn.addLayer(layer);
-          registerLayer(layer, feature.properties && feature.properties.name ? feature.properties.name : null);
-        }
-      });
-
-      Object.keys(meta).forEach((key) => {
-        state.layerMeta[key] = meta[key];
-        if (!state.layerMeta[key].addedAt) state.layerMeta[key].addedAt = new Date().toISOString();
-        if (!state.layerMeta[key].group) state.layerMeta[key].group = "Default";
-        if (!state.groups.includes(state.layerMeta[key].group)) state.groups.push(state.layerMeta[key].group);
-      });
-
+      state.groups = parsed.groups && parsed.groups.length ? parsed.groups.slice() : ["Default"];
+      state.projectName = parsed.projectName || state.projectName || "untitled";
+      state.featureSeq = Number.isFinite(parsed.featureSeq) ? parsed.featureSeq : state.featureSeq;
+      ui.projectTag.textContent = `project: ${state.projectName}`;
+      loadGeoFeatures(parsed.geo || { type: "FeatureCollection", features: [] }, parsed.meta || {});
       refreshLayers();
       updateStatus();
     }
@@ -1748,12 +2219,15 @@
     }
 
     function setLayerOpacity(layer, value) {
-      const id = L.stamp(layer);
-      if (!state.layerMeta[id]) return;
-      state.layerMeta[id].opacity = value;
-
-      if (layer.setStyle) layer.setStyle({ opacity: value, fillOpacity: value * 0.4 });
-      if (layer.setOpacity) layer.setOpacity(value);
+      const meta = getLayerMeta(layer);
+      if (!meta) return;
+      meta.opacity = value;
+      meta.style = {
+        ...(meta.style || readLayerStyle(layer)),
+        opacity: value,
+        fillOpacity: meta.style && Number.isFinite(meta.style.fillOpacity) ? Math.min(meta.style.fillOpacity, value) : Math.min(value, 0.4)
+      };
+      applyLayerSymbology(layer, meta.style);
     }
 
     function zoomTo(layer) {
@@ -1788,9 +2262,7 @@
         return;
       }
 
-      const feature = layer.toGeoJSON();
-      feature.properties = feature.properties || {};
-      feature.properties.name = meta.name;
+      const feature = layerToFeature(layer, { includeInternal: false });
       const safe = (meta.name || "layer").replace(/[^a-z0-9-_]+/gi, "_").toLowerCase();
 
       if (format === "geojson") {
@@ -1812,13 +2284,14 @@
       }
 
       if (format === "csv") {
-        const rows = [["name", "type", "lat", "lng"]];
+        const userFields = publicPropertyKeys([layer]);
+        const rows = [["name", "group", "type", "lat", "lng"].concat(userFields)];
         if (layer.getLatLng) {
           const ll = layer.getLatLng();
-          rows.push([meta.name, meta.kind, ll.lat, ll.lng]);
+          rows.push([meta.name, meta.group, meta.kind, ll.lat, ll.lng].concat(userFields.map((field) => layerAttributeValue(layer, field))));
         } else if (layer.getBounds) {
           const c = layer.getBounds().getCenter();
-          rows.push([meta.name, meta.kind, c.lat, c.lng]);
+          rows.push([meta.name, meta.group, meta.kind, c.lat, c.lng].concat(userFields.map((field) => layerAttributeValue(layer, field))));
         } else {
           modalInfo("CSV Export", "CSV export is only available for point-like layers.");
           return;
@@ -1848,6 +2321,345 @@
       toggleLayerDrawer(true);
     }
 
+    function layerAttributeValue(layer, field) {
+      const meta = getLayerMeta(layer);
+      if (field === "name") return meta ? meta.name : "";
+      if (field === "group") return meta ? meta.group : "";
+      if (field === "kind") return meta ? meta.kind : layerTypeName(layer);
+      return ensureLayerProperties(layer)[field] ?? "";
+    }
+
+    function setLayerAttributeValue(layer, field, rawValue) {
+      const meta = getLayerMeta(layer);
+      if (!meta) return;
+
+      if (field === "name") {
+        meta.name = safeName(rawValue, meta.name || layerTypeName(layer));
+        return;
+      }
+
+      if (field === "group") {
+        meta.group = ensureGroupExists(rawValue || meta.group || "Default");
+        return;
+      }
+
+      if (field === "kind") return;
+      const props = ensureLayerProperties(layer);
+      props[field] = coerceAttributeValue(rawValue, props[field]);
+    }
+
+    function scopeOptionsMarkup(selected = "all") {
+      return [`<option value="all" ${selected === "all" ? "selected" : ""}>All Feature Layers</option>`]
+        .concat(state.groups.map((group) => `<option value="${escapeHtml(group)}" ${group === selected ? "selected" : ""}>${escapeHtml(group)}</option>`))
+        .join("");
+    }
+
+    function openFieldManager(initialScope = "all") {
+      const allFeatureLayers = layersInScope("all");
+      const fieldOptions = publicPropertyKeys(allFeatureLayers)
+        .map((field) => `<option value="${escapeHtml(field)}">${escapeHtml(field)}</option>`)
+        .join("");
+
+      modalOpen(
+        "Schema Tools",
+        `
+          <div class="note-grid">
+            <p class="modal-text">Add or remove attribute fields across a group or across all editable feature layers.</p>
+            <div class="row">
+              <select id="fieldScope" class="field">${scopeOptionsMarkup(initialScope)}</select>
+              <select id="fieldAction" class="field">
+                <option value="add">Add field</option>
+                <option value="delete">Delete field</option>
+              </select>
+            </div>
+            <div class="row">
+              <input id="newFieldName" class="field" placeholder="Field name" />
+              <select id="newFieldType" class="field">
+                <option value="string">Text</option>
+                <option value="number">Number</option>
+                <option value="boolean">Boolean</option>
+              </select>
+            </div>
+            <input id="newFieldDefault" class="field" placeholder="Default value for new field" />
+            <select id="deleteFieldName" class="field">${fieldOptions || "<option value=''>No user fields available</option>"}</select>
+          </div>
+        `,
+        [
+          { label: "Close", onClick: modalClose },
+          {
+            label: "Apply",
+            variant: "brand",
+            onClick: () => {
+              const scope = document.getElementById("fieldScope").value || "all";
+              const action = document.getElementById("fieldAction").value;
+              const targetLayers = layersInScope(scope);
+              if (!targetLayers.length) {
+                toast("No editable features in that scope", 2200);
+                return;
+              }
+
+              if (action === "add") {
+                const field = safeName(document.getElementById("newFieldName").value, "").replace(/\s+/g, "_");
+                const type = document.getElementById("newFieldType").value;
+                const defaultRaw = document.getElementById("newFieldDefault").value;
+                if (!field) {
+                  toast("Field name required", 2200);
+                  return;
+                }
+                if (META_FIELDS.includes(field) || isSystemField(field)) {
+                  toast("That field name is reserved", 2200);
+                  return;
+                }
+                const value = typedValueFromInput(type, defaultRaw);
+                targetLayers.forEach((layer) => {
+                  ensureLayerProperties(layer)[field] = cloneJson(value);
+                });
+                modalClose();
+                snapshot();
+                refreshLayers();
+                toast(`Field added: ${field}`);
+                return;
+              }
+
+              const field = document.getElementById("deleteFieldName").value;
+              if (!field) {
+                toast("Choose a field to delete", 2200);
+                return;
+              }
+              const ok = window.confirm(`Delete field "${field}" from ${targetLayers.length} feature(s)?`);
+              if (!ok) return;
+              targetLayers.forEach((layer) => {
+                delete ensureLayerProperties(layer)[field];
+              });
+              modalClose();
+              snapshot();
+              refreshLayers();
+              toast(`Field deleted: ${field}`);
+            }
+          }
+        ]
+      );
+    }
+
+    function openAttributeTable(initialScope = "all") {
+      modalOpen(
+        "Attribute Table",
+        `
+          <div class="table-toolbar">
+            <select id="attributeScope" class="field">${scopeOptionsMarkup(initialScope)}</select>
+            <input id="attributeSearch" class="field" placeholder="Search rows or values" />
+            <span class="pill" id="attributeStats">0 rows</span>
+          </div>
+          <div class="table-shell">
+            <table class="attr-table">
+              <thead id="attributeHead"></thead>
+              <tbody id="attributeBody"></tbody>
+            </table>
+          </div>
+        `,
+        [
+          { label: "Close", onClick: modalClose },
+          {
+            label: "Schema Tools",
+            onClick: () => {
+              const scope = document.getElementById("attributeScope").value || "all";
+              modalClose();
+              openFieldManager(scope);
+            }
+          },
+          {
+            label: "Save Changes",
+            variant: "brand",
+            onClick: () => {
+              const inputs = Array.from(ui.modalBody.querySelectorAll("[data-attr-layer][data-attr-field]"));
+              inputs.forEach((input) => {
+                const layer = findLayerById(input.getAttribute("data-attr-layer"));
+                if (!layer) return;
+                setLayerAttributeValue(layer, input.getAttribute("data-attr-field"), input.value);
+              });
+              modalClose();
+              snapshot();
+              refreshLayers();
+              toast("Attribute edits saved");
+            }
+          }
+        ]
+      );
+
+      const scopeEl = document.getElementById("attributeScope");
+      const searchEl = document.getElementById("attributeSearch");
+      const head = document.getElementById("attributeHead");
+      const body = document.getElementById("attributeBody");
+      const stats = document.getElementById("attributeStats");
+
+      const renderTable = () => {
+        const scope = scopeEl.value || "all";
+        const query = String(searchEl.value || "").trim().toLowerCase();
+        const layers = layersInScope(scope)
+          .sort((a, b) => String(layerAttributeValue(a, "name")).localeCompare(String(layerAttributeValue(b, "name"))))
+          .filter((layer) => {
+            if (!query) return true;
+            const haystack = [
+              layerAttributeValue(layer, "name"),
+              layerAttributeValue(layer, "group"),
+              layerAttributeValue(layer, "kind"),
+              ...publicPropertyEntries(layer).flat()
+            ].join(" ").toLowerCase();
+            return haystack.includes(query);
+          });
+
+        const fields = publicPropertyKeys(layers);
+        head.innerHTML = `
+          <tr>
+            <th>#</th>
+            <th>Name</th>
+            <th>Group</th>
+            <th>Kind</th>
+            ${fields.map((field) => `<th>${escapeHtml(field)}</th>`).join("")}
+            <th>Actions</th>
+          </tr>
+        `;
+
+        if (!layers.length) {
+          body.innerHTML = `<tr><td colspan="${fields.length + 5}">No features in this scope.</td></tr>`;
+          stats.textContent = "0 rows";
+          return;
+        }
+
+        body.innerHTML = layers.map((layer, index) => {
+          const layerId = layerKey(layer);
+          const meta = getLayerMeta(layer);
+          return `
+            <tr>
+              <td class="cell-fixed">${index + 1}</td>
+              <td><input class="field attr-input" data-attr-layer="${layerId}" data-attr-field="name" value="${escapeHtml(layerAttributeValue(layer, "name"))}" /></td>
+              <td><input class="field attr-input" data-attr-layer="${layerId}" data-attr-field="group" value="${escapeHtml(layerAttributeValue(layer, "group"))}" /></td>
+              <td class="cell-fixed">${escapeHtml(meta && meta.kind ? meta.kind : layerTypeName(layer))}</td>
+              ${fields.map((field) => `<td><input class="field attr-input" data-attr-layer="${layerId}" data-attr-field="${escapeHtml(field)}" value="${escapeHtml(layerAttributeValue(layer, field))}" /></td>`).join("")}
+              <td class="cell-fixed"><button class="btn" data-zoom-layer="${layerId}"><i class="fa-solid fa-location-dot"></i> Zoom</button></td>
+            </tr>
+          `;
+        }).join("");
+
+        stats.textContent = `${layers.length} row${layers.length === 1 ? "" : "s"} • ${fields.length} field${fields.length === 1 ? "" : "s"}`;
+        body.querySelectorAll("[data-zoom-layer]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const layer = findLayerById(btn.getAttribute("data-zoom-layer"));
+            if (layer) zoomTo(layer);
+          });
+        });
+      };
+
+      scopeEl.addEventListener("change", renderTable);
+      searchEl.addEventListener("input", renderTable);
+      renderTable();
+    }
+
+    async function editLayerSymbology(layer) {
+      const meta = getLayerMeta(layer);
+      if (!meta) return;
+      const kind = styleKindForLayer(layer);
+      if (!["marker", "line", "polygon", "circle", "circle-marker"].includes(kind)) {
+        await modalInfo("Symbology", "Symbology editing is available for vector layers and point features.");
+        return;
+      }
+
+      const style = {
+        ...readLayerStyle(layer),
+        ...(meta.style || {})
+      };
+
+      const html = kind === "marker"
+        ? `
+          <div class="symbology-preview"><div class="symbology-preview-swatch" style="background:${escapeHtml(style.color)};color:#071218;border:2px solid ${escapeHtml(style.strokeColor || "#072018")}">Marker</div></div>
+          <div class="row">
+            <input id="symColor" class="field" type="color" value="${escapeHtml(style.color)}" />
+            <input id="symStrokeColor" class="field" type="color" value="${escapeHtml(style.strokeColor || "#072018")}" />
+          </div>
+          <div class="row">
+            <input id="symSize" class="field" type="number" min="16" max="64" value="${escapeHtml(style.size || 28)}" />
+            <select id="symMarkerShape" class="field">
+              <option value="pin" ${style.markerShape !== "dot" ? "selected" : ""}>Pin</option>
+              <option value="dot" ${style.markerShape === "dot" ? "selected" : ""}>Dot</option>
+            </select>
+          </div>
+          <input id="symOpacity" class="field" type="number" min="0.1" max="1" step="0.05" value="${escapeHtml(style.opacity || 1)}" />
+        `
+        : kind === "line"
+          ? `
+            <div class="symbology-preview"><div class="symbology-preview-swatch" style="background:rgba(0,0,0,0);color:#dceaf0;border:${Math.max(2, Number(style.weight) || 2)}px solid ${escapeHtml(style.color)}">${escapeHtml(meta.kind)}</div></div>
+            <div class="row">
+              <input id="symColor" class="field" type="color" value="${escapeHtml(style.color)}" />
+              <input id="symWeight" class="field" type="number" min="1" max="16" value="${escapeHtml(style.weight || 2)}" />
+            </div>
+            <div class="row">
+              <input id="symOpacity" class="field" type="number" min="0.05" max="1" step="0.05" value="${escapeHtml(style.opacity || 1)}" />
+              <input id="symDash" class="field" placeholder="Dash array e.g. 8,6" value="${escapeHtml(style.dashArray || "")}" />
+            </div>
+          `
+        : `
+          <div class="symbology-preview"><div class="symbology-preview-swatch" style="background:${escapeHtml(style.fillColor || style.color)};color:#071218;border:${Math.max(2, Number(style.weight) || 2)}px solid ${escapeHtml(style.color)}">${escapeHtml(meta.kind)}</div></div>
+          <div class="row">
+            <input id="symColor" class="field" type="color" value="${escapeHtml(style.color)}" />
+            <input id="symFillColor" class="field" type="color" value="${escapeHtml(style.fillColor || style.color)}" />
+          </div>
+          <div class="row">
+            <input id="symWeight" class="field" type="number" min="1" max="16" value="${escapeHtml(style.weight || 2)}" />
+            <input id="symOpacity" class="field" type="number" min="0.05" max="1" step="0.05" value="${escapeHtml(style.opacity || 1)}" />
+          </div>
+          <div class="row">
+            <input id="symFillOpacity" class="field" type="number" min="0" max="1" step="0.05" value="${escapeHtml(style.fillOpacity ?? 0.2)}" />
+            <input id="symDash" class="field" placeholder="Dash array e.g. 8,6" value="${escapeHtml(style.dashArray || "")}" />
+          </div>
+          ${kind === "circle-marker" ? `<input id="symRadius" class="field" type="number" min="2" max="40" value="${escapeHtml(style.radius || 8)}" />` : ""}
+        `;
+
+      modalOpen(
+        `Symbology: ${meta.name}`,
+        html,
+        [
+          { label: "Close", onClick: modalClose },
+          {
+            label: "Apply",
+            variant: "brand",
+            onClick: () => {
+              const nextStyle = kind === "marker"
+                ? {
+                    markerShape: document.getElementById("symMarkerShape").value,
+                    color: document.getElementById("symColor").value,
+                    strokeColor: document.getElementById("symStrokeColor").value,
+                    size: Number(document.getElementById("symSize").value),
+                    opacity: Number(document.getElementById("symOpacity").value)
+                  }
+                : kind === "line"
+                  ? {
+                      color: document.getElementById("symColor").value,
+                      weight: Number(document.getElementById("symWeight").value),
+                      opacity: Number(document.getElementById("symOpacity").value),
+                      dashArray: document.getElementById("symDash").value.trim()
+                    }
+                : {
+                    color: document.getElementById("symColor").value,
+                    fillColor: document.getElementById("symFillColor").value,
+                    weight: Number(document.getElementById("symWeight").value),
+                    opacity: Number(document.getElementById("symOpacity").value),
+                    fillOpacity: Number(document.getElementById("symFillOpacity").value),
+                    dashArray: document.getElementById("symDash").value.trim()
+                  };
+              if (kind === "circle-marker") {
+                nextStyle.radius = Number(document.getElementById("symRadius").value);
+              }
+              applyLayerSymbology(layer, nextStyle, { refresh: true });
+              modalClose();
+              snapshot();
+              refreshLayers();
+              toast("Symbology updated");
+            }
+          }
+        ]
+      );
+    }
+
     function renderLayerList(container) {
       if (!container) return;
       container.innerHTML = "";
@@ -1855,7 +2667,7 @@
       const grouped = {};
 
       layers.forEach((layer) => {
-        const id = L.stamp(layer);
+        const id = layerKey(layer);
         if (!state.layerMeta[id]) registerLayer(layer);
         const group = state.layerMeta[id].group || "Default";
         if (!grouped[group]) grouped[group] = [];
@@ -1871,7 +2683,7 @@
         container.appendChild(title);
 
         grouped[groupName].forEach((layer) => {
-          const id = L.stamp(layer);
+          const id = layerKey(layer);
           const meta = state.layerMeta[id];
 
           const card = document.createElement("div");
@@ -1882,11 +2694,10 @@
 
           const check = document.createElement("input");
           check.type = "checkbox";
-          check.checked = state.map.hasLayer(layer);
+          check.checked = meta.visible !== false && state.map.hasLayer(layer);
           check.addEventListener("change", () => {
-            meta.visible = check.checked;
-            if (check.checked) layer.addTo(state.map);
-            else layer.removeFrom(state.map);
+            applyLayerVisibility(layer, check.checked);
+            snapshot();
           });
 
           const name = document.createElement("div");
@@ -1897,6 +2708,7 @@
             const value = await modalPrompt("Rename Layer", "Layer name", "Type new name", meta.name);
             if (value) {
               meta.name = safeName(value, meta.name);
+              snapshot();
               refreshLayers();
             }
           });
@@ -1905,6 +2717,18 @@
           zoomBtn.className = "icon-btn";
           zoomBtn.innerHTML = "<i class='fa-solid fa-location-dot'></i>";
           zoomBtn.addEventListener("click", () => zoomTo(layer));
+
+          const attrBtn = document.createElement("button");
+          attrBtn.className = "icon-btn";
+          attrBtn.innerHTML = "<i class='fa-solid fa-table-list'></i>";
+          attrBtn.title = "Open attribute table";
+          attrBtn.addEventListener("click", () => openAttributeTable(meta.group || "all"));
+
+          const styleBtn = document.createElement("button");
+          styleBtn.className = "icon-btn";
+          styleBtn.innerHTML = "<i class='fa-solid fa-palette'></i>";
+          styleBtn.title = "Edit symbology";
+          styleBtn.addEventListener("click", () => editLayerSymbology(layer));
 
           const groupBtn = document.createElement("button");
           groupBtn.className = "icon-btn";
@@ -1917,7 +2741,8 @@
               () => ({ group: document.getElementById("groupPicker").value })
             );
             if (data && data.group) {
-              meta.group = data.group;
+              meta.group = ensureGroupExists(data.group);
+              snapshot();
               refreshLayers();
             }
           });
@@ -1941,14 +2766,14 @@
           exportBtn.innerHTML = "<i class='fa-solid fa-file-export'></i>";
           exportBtn.addEventListener("click", () => exportLayerPrompt(layer, meta));
 
-          top.append(check, name, zoomBtn, groupBtn, exportBtn, delBtn);
+          top.append(check, name, zoomBtn, attrBtn, styleBtn, groupBtn, exportBtn, delBtn);
 
           const op = document.createElement("input");
           op.type = "range";
           op.min = "0";
           op.max = "1";
           op.step = "0.05";
-          op.value = String(meta.opacity || 1);
+          op.value = String(meta.opacity ?? 1);
           op.addEventListener("input", () => setLayerOpacity(layer, Number(op.value)));
 
           const metaRow = document.createElement("div");
@@ -2272,6 +3097,9 @@
         const lng = Number(data[0].lon);
         state.map.flyTo([lat, lng], 15);
         const marker = L.marker([lat, lng]).addTo(state.drawn).bindPopup(data[0].display_name).openPopup();
+        const props = ensureLayerProperties(marker);
+        props.query = q;
+        props.address = data[0].display_name || q;
         registerLayer(marker, safeName(q, "Search Result"));
         snapshot();
         refreshLayers();
@@ -2294,6 +3122,7 @@
             iconSize: null
           });
           const marker = L.marker(e.latlng, { icon }).addTo(state.drawn);
+          ensureLayerProperties(marker).label = text;
           registerLayer(marker, `Label: ${safeName(text, "Label")}`);
           snapshot();
           refreshLayers();
@@ -2312,6 +3141,7 @@
             iconSize: [28, 28]
           });
           const marker = L.marker(e.latlng, { icon }).addTo(state.drawn);
+          ensureLayerProperties(marker).emoji = emoji;
           registerLayer(marker, `Emoji ${emoji}`);
           snapshot();
           refreshLayers();
@@ -2523,10 +3353,14 @@
         modalInfo("Operation Failed", "No result was produced from this operation.");
         return;
       }
-      const layer = L.geoJSON(feature, { style });
+      const layer = L.geoJSON(feature, {
+        style,
+        pointToLayer: (_, latlng) => L.circleMarker(latlng, { radius: style.radius || 7 })
+      });
       layer.eachLayer((l) => {
         state.drawn.addLayer(l);
-        registerLayer(l, name);
+        registerLayer(l, (l.feature && l.feature.properties && l.feature.properties.name) || name);
+        applyLayerSymbology(l, style);
       });
       snapshot();
       refreshLayers();
@@ -2701,20 +3535,183 @@
       }
     }
 
-    function geoFeatures() {
-      const geo = state.drawn.toGeoJSON();
-      geo.features.forEach((f, i) => {
-        if (!f.properties) f.properties = {};
-        const layer = state.drawn.getLayers()[i];
-        if (!layer) return;
-        const meta = state.layerMeta[L.stamp(layer)];
-        if (meta) {
-          f.properties.name = meta.name;
-          f.properties.group = meta.group;
-          f.properties.kind = meta.kind;
+    async function gpDissolveField() {
+      const polys = polygonLayers();
+      if (!polys.length) {
+        await modalInfo("Dissolve by Field", "Add polygon features before dissolving by attribute.");
+        return;
+      }
+
+      const fields = Array.from(new Set(["group", "name"].concat(publicPropertyKeys(polys))));
+      if (!fields.length) {
+        await modalInfo("No Fields", "No dissolve fields were found on the current polygons.");
+        return;
+      }
+
+      const data = await modalForm(
+        "Dissolve by Field",
+        `<select id="dissolveField" class="field">${fields.map((field) => `<option value="${escapeHtml(field)}">${escapeHtml(field)}</option>`).join("")}</select>`,
+        () => ({ field: document.getElementById("dissolveField").value })
+      );
+      if (!data || !data.field) return;
+
+      try {
+        const grouped = new Map();
+        polys.forEach((layer) => {
+          const value = String(layerAttributeValue(layer, data.field) ?? "").trim() || "(blank)";
+          if (!grouped.has(value)) grouped.set(value, []);
+          grouped.get(value).push(layerToFeature(layer, { includeInternal: true }));
+        });
+
+        const dissolved = [];
+        grouped.forEach((features, value) => {
+          let merged = features[0];
+          for (let i = 1; i < features.length; i += 1) {
+            const next = turf.union(merged, features[i]);
+            if (next) merged = next;
+          }
+          if (!merged) return;
+          merged.properties = {
+            ...(merged.properties || {}),
+            [data.field]: value,
+            dissolve_count: features.length,
+            name: `Dissolve ${value}`
+          };
+          delete merged.properties[INTERNAL_FIELD_ID];
+          dissolved.push(merged);
+        });
+
+        addGeoFeatureResult(turf.featureCollection(dissolved), `Dissolve ${data.field}`, { color: "#6ce5c0", fillOpacity: 0.18, weight: 2 });
+      } catch (err) {
+        console.error(err);
+        modalInfo("Dissolve Error", "Unable to dissolve polygons by that field.");
+      }
+    }
+
+    async function gpClip() {
+      const polys = polygonLayers();
+      if (!polys.length) {
+        await modalInfo("Clip by Polygon", "Add at least one polygon to use as the clipping mask.");
+        return;
+      }
+
+      const data = await modalForm(
+        "Clip by Polygon",
+        `
+          <select id="clipMask" class="field">
+            ${polys.map((layer) => {
+              const meta = getLayerMeta(layer);
+              return `<option value="${layerKey(layer)}">${escapeHtml(meta ? meta.name : "Polygon")}</option>`;
+            }).join("")}
+          </select>
+          <select id="clipScope" class="field">${scopeOptionsMarkup("all")}</select>
+        `,
+        () => ({
+          maskId: document.getElementById("clipMask").value,
+          scope: document.getElementById("clipScope").value
+        })
+      );
+      if (!data || !data.maskId) return;
+
+      const maskLayer = findLayerById(data.maskId);
+      if (!maskLayer) return;
+      const maskFeature = layerToFeature(maskLayer, { includeInternal: false });
+      const results = [];
+      let skipped = 0;
+
+      layersInScope(data.scope).forEach((layer) => {
+        if (layerKey(layer) === data.maskId) return;
+        const feature = layerToFeature(layer, { includeInternal: false });
+        if (!feature || !feature.geometry) return;
+        const type = feature.geometry.type;
+
+        if (type === "Point") {
+          if (turf.booleanPointInPolygon(feature, maskFeature)) results.push(feature);
+          return;
         }
+
+        if (type === "Polygon" || type === "MultiPolygon") {
+          const clipped = turf.intersect(feature, maskFeature);
+          if (clipped) {
+            clipped.properties = {
+              ...(feature.properties || {}),
+              name: (feature.properties && feature.properties.name) || "Clipped Feature"
+            };
+            results.push(clipped);
+          }
+          return;
+        }
+
+        skipped += 1;
       });
-      return geo;
+
+      if (!results.length) {
+        await modalInfo("No Clip Result", "No point or polygon features intersected the chosen mask.");
+        return;
+      }
+
+      addGeoFeatureResult(turf.featureCollection(results), "Clipped", { color: "#8fd8ff", fillOpacity: 0.16, weight: 2 });
+      if (skipped) toast(`Clip skipped ${skipped} line feature(s)`, 2600);
+    }
+
+    async function gpCountPoints() {
+      const points = layersInScope("all").filter((layer) => layerBucket(layer) === "point");
+      const polys = polygonLayers();
+      if (!points.length || !polys.length) {
+        await modalInfo("Count Points", "You need both point layers and polygon layers.");
+        return;
+      }
+
+      const field = await modalPrompt("Count Points in Polygons", "Output field name", "point_count", "point_count");
+      if (!field) return;
+      const safeField = safeName(field, "point_count").replace(/\s+/g, "_");
+
+      polys.forEach((polyLayer) => {
+        const polyFeature = layerToFeature(polyLayer, { includeInternal: false });
+        let count = 0;
+        points.forEach((pointLayer) => {
+          const pointFeature = layerToFeature(pointLayer, { includeInternal: false });
+          if (pointFeature && turf.booleanPointInPolygon(pointFeature, polyFeature)) count += 1;
+        });
+        ensureLayerProperties(polyLayer)[safeField] = count;
+      });
+
+      snapshot();
+      refreshLayers();
+      toast(`Updated polygon field: ${safeField}`);
+    }
+
+    async function gpHexGrid() {
+      const raw = await modalPrompt("Hex Grid", "Cell size in miles", "e.g. 5", "5");
+      const miles = Number(raw);
+      if (!Number.isFinite(miles) || miles <= 0) return;
+      try {
+        const bounds = state.map.getBounds();
+        const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()];
+        const grid = turf.hexGrid(bbox, miles, { units: "miles" });
+        grid.features.forEach((feature, index) => {
+          feature.properties = {
+            ...(feature.properties || {}),
+            grid_id: index + 1,
+            cell_miles: miles,
+            name: `Hex ${index + 1}`
+          };
+        });
+        addGeoFeatureResult(grid, `Hex Grid ${miles}mi`, { color: "#ffd17e", fillColor: "#ffd17e", fillOpacity: 0.08, weight: 1 });
+      } catch (err) {
+        console.error(err);
+        modalInfo("Hex Grid Error", "Unable to generate a grid for the current map extent.");
+      }
+    }
+
+    function geoFeatures(options = {}) {
+      const config = { includeInternal: false, includeMeta: true, ...options };
+      return {
+        type: "FeatureCollection",
+        features: state.drawn.getLayers()
+          .map((layer) => layerToFeature(layer, config))
+          .filter(Boolean)
+      };
     }
 
     function downloadFile(name, type, content) {
@@ -2734,17 +3731,23 @@
     }
 
     function exportCSV() {
-      const rows = [["name", "type", "lat", "lng"]];
-      state.drawn.eachLayer((layer) => {
-        const id = L.stamp(layer);
-        const meta = state.layerMeta[id] || { name: "Layer", kind: "Unknown" };
+      const featureLayers = layersInScope("all");
+      const userFields = publicPropertyKeys(featureLayers);
+      const rows = [["name", "group", "type", "lat", "lng"].concat(userFields)];
+      featureLayers.forEach((layer) => {
+        const meta = getLayerMeta(layer) || { name: "Layer", group: "Default", kind: "Unknown" };
+        let lat = "";
+        let lng = "";
         if (layer.getLatLng) {
           const ll = layer.getLatLng();
-          rows.push([meta.name, meta.kind, ll.lat, ll.lng]);
+          lat = ll.lat;
+          lng = ll.lng;
         } else if (layer.getBounds) {
           const c = layer.getBounds().getCenter();
-          rows.push([meta.name, meta.kind, c.lat, c.lng]);
+          lat = c.lat;
+          lng = c.lng;
         }
+        rows.push([meta.name, meta.group, meta.kind, lat, lng].concat(userFields.map((field) => layerAttributeValue(layer, field))));
       });
       const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
       downloadFile(`${state.projectName || "mapdash"}.csv`, "text/csv", csv);
@@ -2839,7 +3842,9 @@
         c: [Number(center.lat.toFixed(6)), Number(center.lng.toFixed(6))],
         z: state.map.getZoom(),
         n: state.projectName,
-        g: geoFeatures()
+        g: geoFeatures({ includeInternal: true }),
+        m: cloneJson(state.layerMeta),
+        r: state.groups.slice()
       };
       const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(data))));
       const url = `${location.origin}${location.pathname}#state=${encoded}`;
@@ -2856,17 +3861,8 @@
 
         state.projectName = payload.n || "shared-map";
         ui.projectTag.textContent = `project: ${state.projectName}`;
-        state.drawn.clearLayers();
-        state.layerMeta = {};
-
-        L.geoJSON(payload.g, {
-          pointToLayer: (_, latlng) => L.marker(latlng),
-          onEachFeature: (feature, layer) => {
-            state.drawn.addLayer(layer);
-            registerLayer(layer, feature.properties && feature.properties.name ? feature.properties.name : null);
-          }
-        });
-
+        state.groups = payload.r && payload.r.length ? payload.r.slice() : ["Default"];
+        loadGeoFeatures(payload.g, payload.m || {});
         state.map.setView(payload.c || [20, 0], payload.z || 2);
         snapshot();
         refreshLayers();
@@ -2883,9 +3879,10 @@
         savedAt: new Date().toISOString(),
         center: state.map.getCenter(),
         zoom: state.map.getZoom(),
-        geo: geoFeatures(),
-        meta: state.layerMeta,
-        groups: state.groups
+        geo: geoFeatures({ includeInternal: true }),
+        meta: cloneJson(state.layerMeta),
+        groups: state.groups.slice(),
+        featureSeq: state.featureSeq
       };
 
       const idx = all.findIndex((p) => p.name === state.projectName);
@@ -2916,21 +3913,8 @@
       state.projectName = proj.name;
       ui.projectTag.textContent = `project: ${state.projectName}`;
       state.groups = proj.groups && proj.groups.length ? proj.groups : ["Default"];
-      state.drawn.clearLayers();
-      state.layerMeta = {};
-
-      L.geoJSON(proj.geo, {
-        pointToLayer: (_, latlng) => L.marker(latlng),
-        onEachFeature: (feature, layer) => {
-          state.drawn.addLayer(layer);
-          registerLayer(layer, feature.properties && feature.properties.name ? feature.properties.name : null);
-        }
-      });
-
-      Object.keys(proj.meta || {}).forEach((k) => {
-        state.layerMeta[k] = proj.meta[k];
-      });
-
+      state.featureSeq = Number.isFinite(proj.featureSeq) ? proj.featureSeq : state.featureSeq;
+      loadGeoFeatures(proj.geo, proj.meta || {});
       state.map.setView([proj.center.lat, proj.center.lng], proj.zoom || 2);
       snapshot();
       refreshLayers();
@@ -2950,6 +3934,7 @@
       state.layerMeta = {};
       state.history = [];
       state.redo = [];
+      state.featureSeq = 0;
       state.map.setView([20, 0], 2);
       snapshot();
       refreshLayers();
@@ -2978,7 +3963,10 @@
       const finishAdd = (group) => {
         group.eachLayer((layer) => {
           state.drawn.addLayer(layer);
-          registerLayer(layer);
+          registerLayer(
+            layer,
+            (layer.feature && layer.feature.properties && (layer.feature.properties.name || layer.feature.properties.Name || layer.feature.properties.title)) || null
+          );
         });
         snapshot();
         refreshLayers();
@@ -3014,22 +4002,67 @@
 
     function importCsvFile(file) {
       if (!file) return;
-      Papa.parse(file, {
-        skipEmptyLines: true,
-        complete: (result) => {
-          let count = 0;
-          result.data.forEach((row) => {
-            if (!Array.isArray(row) || row.length < 2) return;
-            const lat = Number(row[0]);
-            const lng = Number(row[1]);
-            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-            const label = String(row[2] || "CSV Point");
-            const m = L.marker([lat, lng]).bindPopup(label).addTo(state.drawn);
-            registerLayer(m, safeName(label, "CSV Point"));
-            count += 1;
+      const importRows = (rows, latField, lngField) => {
+        let count = 0;
+        rows.forEach((row, index) => {
+          const lat = Number(row[latField]);
+          const lng = Number(row[lngField]);
+          if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+          const label = String(row.name || row.Name || row.label || row.Label || `CSV Point ${index + 1}`);
+          const marker = L.marker([lat, lng]).bindPopup(label).addTo(state.drawn);
+          const props = ensureLayerProperties(marker);
+          Object.entries(row).forEach(([field, value]) => {
+            if (field === latField || field === lngField || value == null || value === "") return;
+            props[field] = value;
           });
+          registerLayer(marker, safeName(label, "CSV Point"));
+          count += 1;
+        });
+        return count;
+      };
+
+      const fallbackArrayImport = () => {
+        Papa.parse(file, {
+          skipEmptyLines: true,
+          complete: (result) => {
+            let count = 0;
+            result.data.forEach((row, index) => {
+              if (!Array.isArray(row) || row.length < 2) return;
+              const lat = Number(row[0]);
+              const lng = Number(row[1]);
+              if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+              const label = String(row[2] || `CSV Point ${index + 1}`);
+              const marker = L.marker([lat, lng]).bindPopup(label).addTo(state.drawn);
+              registerLayer(marker, safeName(label, "CSV Point"));
+              count += 1;
+            });
+            if (!count) {
+              modalInfo("No Coordinates", "CSV must include latitude/longitude columns or use lat,lng in the first two fields.");
+              return;
+            }
+            snapshot();
+            refreshLayers();
+            toast(`CSV imported (${count})`);
+          }
+        });
+      };
+
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        dynamicTyping: true,
+        complete: (result) => {
+          const fields = Array.isArray(result.meta && result.meta.fields) ? result.meta.fields.filter(Boolean) : [];
+          const latField = detectCoordinateField(fields, ["lat", "latitude", "y"]);
+          const lngField = detectCoordinateField(fields, ["lng", "lon", "long", "longitude", "x"]);
+          if (!latField || !lngField) {
+            fallbackArrayImport();
+            return;
+          }
+
+          const count = importRows(result.data, latField, lngField);
           if (!count) {
-            modalInfo("No Coordinates", "CSV must include latitude and longitude columns.");
+            modalInfo("No Coordinates", "CSV rows were found, but no valid coordinates could be parsed.");
             return;
           }
           snapshot();
@@ -3048,7 +4081,7 @@
           const layer = L.geoJSON(geo);
           layer.eachLayer((l) => {
             state.drawn.addLayer(l);
-            registerLayer(l, "SHP Feature");
+            registerLayer(l, (l.feature && l.feature.properties && (l.feature.properties.name || l.feature.properties.Name)) || "SHP Feature");
           });
           snapshot();
           refreshLayers();
@@ -3068,18 +4101,46 @@
         try {
           const workbook = XLSX.read(event.target.result, { type: "array" });
           const firstSheet = workbook.SheetNames[0];
-          const rows = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet], { header: 1, raw: false });
+          const rows = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet], { defval: "", raw: false });
           let count = 0;
-          rows.forEach((row) => {
-            if (!Array.isArray(row) || row.length < 2) return;
-            const lat = Number(row[0]);
-            const lng = Number(row[1]);
-            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-            const label = String(row[2] || "Sheet Point");
-            const m = L.marker([lat, lng]).bindPopup(label).addTo(state.drawn);
-            registerLayer(m, safeName(label, "Sheet Point"));
-            count += 1;
-          });
+
+          if (rows.length) {
+            const fields = Object.keys(rows[0]);
+            const latField = detectCoordinateField(fields, ["lat", "latitude", "y"]);
+            const lngField = detectCoordinateField(fields, ["lng", "lon", "long", "longitude", "x"]);
+
+            if (latField && lngField) {
+              rows.forEach((row, index) => {
+                const lat = Number(row[latField]);
+                const lng = Number(row[lngField]);
+                if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+                const label = String(row.name || row.Name || row.label || row.Label || `Sheet Point ${index + 1}`);
+                const marker = L.marker([lat, lng]).bindPopup(label).addTo(state.drawn);
+                const props = ensureLayerProperties(marker);
+                Object.entries(row).forEach(([field, value]) => {
+                  if (field === latField || field === lngField || value === "") return;
+                  props[field] = value;
+                });
+                registerLayer(marker, safeName(label, "Sheet Point"));
+                count += 1;
+              });
+            }
+          }
+
+          if (!count) {
+            const fallbackRows = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet], { header: 1, raw: false });
+            fallbackRows.forEach((row, index) => {
+              if (!Array.isArray(row) || row.length < 2) return;
+              const lat = Number(row[0]);
+              const lng = Number(row[1]);
+              if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+              const label = String(row[2] || `Sheet Point ${index + 1}`);
+              const marker = L.marker([lat, lng]).bindPopup(label).addTo(state.drawn);
+              registerLayer(marker, safeName(label, "Sheet Point"));
+              count += 1;
+            });
+          }
+
           if (!count) {
             modalInfo("No Coordinates", "Spreadsheet must have latitude and longitude in first two columns.");
             return;
@@ -3122,15 +4183,14 @@
 
       let visible = 0;
       state.drawn.eachLayer((layer) => {
-        const g = layer.toGeoJSON ? layer.toGeoJSON() : null;
-        const props = (g && g.properties) || {};
-        const val = String(props[data.field] || "").toLowerCase();
+        if (!isFeatureLayer(layer)) return;
+        const val = String(layerAttributeValue(layer, data.field) || "").toLowerCase();
         const pass = val.includes(data.value);
         if (pass) {
-          layer.addTo(state.map);
+          applyLayerVisibility(layer, true);
           visible += 1;
         } else {
-          layer.removeFrom(state.map);
+          applyLayerVisibility(layer, false);
         }
       });
       toast(`Filter applied, visible layers: ${visible}`);
@@ -3222,7 +4282,9 @@
         refreshLayers();
       });
 
-      state.map.on("pm:remove", () => {
+      state.map.on("pm:remove", (e) => {
+        const removed = e && e.layer ? e.layer : null;
+        if (removed) delete state.layerMeta[layerKey(removed)];
         snapshot();
         refreshLayers();
       });
@@ -3324,6 +4386,8 @@
 
       document.getElementById("filterBtn").addEventListener("click", applyFilter);
       document.getElementById("heatBtn").addEventListener("click", generateHeat);
+      document.getElementById("attributeTableBtn").addEventListener("click", () => openAttributeTable("all"));
+      document.getElementById("fieldManagerBtn").addEventListener("click", () => openFieldManager("all"));
       document.getElementById("clearHeatBtn").addEventListener("click", clearHeat);
 
       document.getElementById("areaDistanceBtn").addEventListener("click", runAreaDistance);
@@ -3348,6 +4412,10 @@
       document.getElementById("gpTranslateBtn").addEventListener("click", gpTranslate);
       document.getElementById("gpRotateBtn").addEventListener("click", gpRotate);
       document.getElementById("gpScaleBtn").addEventListener("click", gpScale);
+      document.getElementById("gpDissolveFieldBtn").addEventListener("click", gpDissolveField);
+      document.getElementById("gpClipBtn").addEventListener("click", gpClip);
+      document.getElementById("gpCountBtn").addEventListener("click", gpCountPoints);
+      document.getElementById("gpHexBtn").addEventListener("click", gpHexGrid);
 
       document.getElementById("exportGeoBtn").addEventListener("click", exportGeoJSON);
       document.getElementById("exportKmlBtn").addEventListener("click", exportKML);
@@ -3359,6 +4427,8 @@
       document.getElementById("securityBtn").addEventListener("click", saveVisibility);
 
       document.getElementById("newGroupBtn").addEventListener("click", createGroup);
+      document.getElementById("layerTableBtn").addEventListener("click", () => openAttributeTable("all"));
+      document.getElementById("layerFieldsBtn").addEventListener("click", () => openFieldManager("all"));
 
       document.addEventListener("keydown", (e) => {
         if (!ui.modal.classList.contains("show") && e.key === "/") {
