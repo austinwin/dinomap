@@ -1,0 +1,2024 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DinoMap – Fossil Discovery Map</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="vendor/leaflet.css" />
+  <!-- Leaflet MarkerCluster CSS -->
+  <link rel="stylesheet" href="vendor/MarkerCluster.css" />
+  <link rel="stylesheet" href="vendor/MarkerCluster.Default.css" />
+
+  <style>
+    /* ======================================================
+       BASE / RESET
+       ====================================================== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --clr-bg:         #0d1117;
+      --clr-surface:    #161b22;
+      --clr-border:     #30363d;
+      --clr-text:       #c9d1d9;
+      --clr-text-muted: #8b949e;
+      --clr-accent:     #f0883e;
+      --clr-accent2:    #58a6ff;
+      --clr-triassic:   #e05c5c;
+      --clr-jurassic:   #4caf50;
+      --clr-cretaceous: #2196f3;
+      --clr-herbivore:  #66bb6a;
+      --clr-carnivore:  #ef5350;
+      --clr-omnivore:   #ffa726;
+      --clr-piscivore:  #42a5f5;
+      --sidebar-width:  340px;
+      --panel-radius:   10px;
+      --transition:     0.25s ease;
+    }
+
+    html, body {
+      height: 100%;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--clr-bg);
+      color: var(--clr-text);
+      overflow: hidden;
+    }
+
+    /* ======================================================
+       LAYOUT
+       ====================================================== */
+    #app {
+      display: flex;
+      height: 100vh;
+      width: 100vw;
+    }
+
+    /* ======================================================
+       SIDEBAR
+       ====================================================== */
+    #sidebar {
+      width: var(--sidebar-width);
+      min-width: var(--sidebar-width);
+      background: var(--clr-surface);
+      border-right: 1px solid var(--clr-border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      z-index: 1000;
+      transition: margin-left var(--transition);
+    }
+
+    #sidebar.collapsed { margin-left: calc(-1 * var(--sidebar-width)); }
+
+    #sidebar-header {
+      padding: 16px;
+      border-bottom: 1px solid var(--clr-border);
+      flex-shrink: 0;
+    }
+
+    #sidebar-header h1 {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: var(--clr-accent);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #sidebar-header h1 span.logo { font-size: 1.6rem; }
+
+    #sidebar-header p {
+      font-size: 0.75rem;
+      color: var(--clr-text-muted);
+      margin-top: 4px;
+    }
+
+    /* ---- Search ---- */
+    #search-container {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--clr-border);
+      flex-shrink: 0;
+    }
+
+    #search-input {
+      width: 100%;
+      padding: 8px 12px;
+      background: var(--clr-bg);
+      border: 1px solid var(--clr-border);
+      border-radius: 6px;
+      color: var(--clr-text);
+      font-size: 0.85rem;
+      outline: none;
+      transition: border-color var(--transition);
+    }
+
+    #search-input:focus { border-color: var(--clr-accent2); }
+    #search-input::placeholder { color: var(--clr-text-muted); }
+
+    /* ---- Filters ---- */
+    #filter-container {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--clr-border);
+      flex-shrink: 0;
+    }
+
+    .filter-label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--clr-text-muted);
+      margin-bottom: 8px;
+      display: block;
+    }
+
+    .filter-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .pill {
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      cursor: pointer;
+      border: 1px solid var(--clr-border);
+      background: transparent;
+      color: var(--clr-text-muted);
+      transition: all var(--transition);
+      user-select: none;
+    }
+
+    .pill:hover { border-color: var(--clr-accent); color: var(--clr-accent); }
+
+    .pill.active-era-Triassic    { background: var(--clr-triassic);   border-color: var(--clr-triassic);   color: #fff; }
+    .pill.active-era-Jurassic    { background: var(--clr-jurassic);   border-color: var(--clr-jurassic);   color: #fff; }
+    .pill.active-era-Cretaceous  { background: var(--clr-cretaceous); border-color: var(--clr-cretaceous); color: #fff; }
+    .pill.active-diet-Herbivore  { background: var(--clr-herbivore);  border-color: var(--clr-herbivore);  color: #fff; }
+    .pill.active-diet-Carnivore  { background: var(--clr-carnivore);  border-color: var(--clr-carnivore);  color: #fff; }
+    .pill.active-diet-Omnivore   { background: var(--clr-omnivore);   border-color: var(--clr-omnivore);   color: #fff; }
+    .pill.active-diet-Piscivore  { background: var(--clr-piscivore);  border-color: var(--clr-piscivore);  color: #fff; }
+    .pill.active-era-All         { background: var(--clr-accent);     border-color: var(--clr-accent);     color: #fff; }
+    .pill.active-diet-All        { background: var(--clr-accent);     border-color: var(--clr-accent);     color: #fff; }
+
+    /* ---- Dino list ---- */
+    #dino-list-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 0;
+    }
+
+    #dino-list-container::-webkit-scrollbar { width: 5px; }
+    #dino-list-container::-webkit-scrollbar-track { background: var(--clr-bg); }
+    #dino-list-container::-webkit-scrollbar-thumb { background: var(--clr-border); border-radius: 3px; }
+
+    #result-count {
+      padding: 6px 16px;
+      font-size: 0.72rem;
+      color: var(--clr-text-muted);
+    }
+
+    .dino-card {
+      padding: 10px 16px;
+      cursor: pointer;
+      border-bottom: 1px solid rgba(48,54,61,0.5);
+      transition: background var(--transition);
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .dino-card:hover        { background: rgba(255,255,255,0.04); }
+    .dino-card.selected     { background: rgba(240,136,62,0.12); border-left: 3px solid var(--clr-accent); }
+
+    .dino-card-icon {
+      font-size: 1.5rem;
+      flex-shrink: 0;
+      line-height: 1.2;
+    }
+
+    .dino-card-info { flex: 1; min-width: 0; }
+
+    .dino-card-name {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--clr-text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .dino-card-meta {
+      font-size: 0.72rem;
+      color: var(--clr-text-muted);
+      margin-top: 2px;
+    }
+
+    .dino-card-badges {
+      display: flex;
+      gap: 4px;
+      margin-top: 4px;
+    }
+
+    .badge {
+      font-size: 0.65rem;
+      padding: 2px 7px;
+      border-radius: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .badge-Triassic   { background: rgba(224,92,92,0.2);   color: var(--clr-triassic);   }
+    .badge-Jurassic   { background: rgba(76,175,80,0.2);   color: var(--clr-jurassic);   }
+    .badge-Cretaceous { background: rgba(33,150,243,0.2);  color: var(--clr-cretaceous); }
+    .badge-Herbivore  { background: rgba(102,187,106,0.2); color: var(--clr-herbivore);  }
+    .badge-Carnivore  { background: rgba(239,83,80,0.2);   color: var(--clr-carnivore);  }
+    .badge-Omnivore   { background: rgba(255,167,38,0.2);  color: var(--clr-omnivore);   }
+    .badge-Piscivore  { background: rgba(66,165,245,0.2);  color: var(--clr-piscivore);  }
+
+    /* ---- Sidebar footer ---- */
+    #sidebar-footer {
+      padding: 10px 16px;
+      border-top: 1px solid var(--clr-border);
+      font-size: 0.7rem;
+      color: var(--clr-text-muted);
+      flex-shrink: 0;
+    }
+
+    /* ======================================================
+       MAP AREA
+       ====================================================== */
+    #map-container {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    #map { width: 100%; height: 100%; }
+
+    /* ======================================================
+       TOGGLE SIDEBAR BUTTON
+       ====================================================== */
+    #toggle-sidebar-btn {
+      position: absolute;
+      top: 50%;
+      left: 0;
+      transform: translateY(-50%);
+      z-index: 1001;
+      background: var(--clr-surface);
+      border: 1px solid var(--clr-border);
+      border-left: none;
+      border-radius: 0 6px 6px 0;
+      padding: 10px 5px;
+      cursor: pointer;
+      color: var(--clr-text-muted);
+      font-size: 1rem;
+      transition: color var(--transition), background var(--transition);
+    }
+
+    #toggle-sidebar-btn:hover { color: var(--clr-accent); background: rgba(240,136,62,0.1); }
+
+    /* ======================================================
+       MAP CONTROLS OVERLAY
+       ====================================================== */
+    #map-controls {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      z-index: 1003;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .map-control-btn {
+      background: var(--clr-surface);
+      border: 1px solid var(--clr-border);
+      border-radius: var(--panel-radius);
+      padding: 8px 12px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      color: var(--clr-text);
+      white-space: nowrap;
+      transition: all var(--transition);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .map-control-btn:hover { border-color: var(--clr-accent); color: var(--clr-accent); }
+    .map-control-btn.active { background: rgba(240,136,62,0.15); border-color: var(--clr-accent); color: var(--clr-accent); }
+
+    /* ======================================================
+       DETAIL PANEL (slide-in from right)
+       ====================================================== */
+    #detail-panel {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      bottom: 12px;
+      width: 310px;
+      background: var(--clr-surface);
+      border: 1px solid var(--clr-border);
+      border-radius: var(--panel-radius);
+      z-index: 1002;
+      overflow-y: auto;
+      transform: translateX(calc(100% + 20px));
+      transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
+      flex-direction: column;
+    }
+
+    #detail-panel.open { transform: translateX(0); }
+
+    #detail-panel::-webkit-scrollbar { width: 5px; }
+    #detail-panel::-webkit-scrollbar-track { background: var(--clr-bg); }
+    #detail-panel::-webkit-scrollbar-thumb { background: var(--clr-border); border-radius: 3px; }
+
+    #detail-close {
+      position: sticky;
+      top: 0;
+      right: 0;
+      align-self: flex-end;
+      background: var(--clr-surface);
+      border: none;
+      color: var(--clr-text-muted);
+      font-size: 1.1rem;
+      cursor: pointer;
+      padding: 10px 12px;
+      z-index: 1;
+      transition: color var(--transition);
+    }
+
+    #detail-close:hover { color: var(--clr-accent); }
+
+    #detail-content { padding: 0 16px 20px; }
+
+    #detail-dino-name {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--clr-accent);
+      margin-bottom: 4px;
+    }
+
+    #detail-dino-pronunciation {
+      font-size: 0.78rem;
+      color: var(--clr-text-muted);
+      font-style: italic;
+      margin-bottom: 12px;
+    }
+
+    .detail-icon-row {
+      font-size: 3rem;
+      text-align: center;
+      margin: 10px 0;
+    }
+
+    .detail-section {
+      margin-top: 14px;
+    }
+
+    .detail-section-title {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--clr-text-muted);
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .detail-section-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--clr-border);
+    }
+
+    .detail-kv { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 0.82rem; }
+    .detail-kv-key   { color: var(--clr-text-muted); }
+    .detail-kv-val   { color: var(--clr-text); font-weight: 500; text-align: right; max-width: 55%; }
+
+    .detail-description {
+      font-size: 0.82rem;
+      line-height: 1.6;
+      color: var(--clr-text);
+      margin-top: 6px;
+    }
+
+    .detail-location-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: rgba(88,166,255,0.1);
+      border: 1px solid rgba(88,166,255,0.3);
+      border-radius: 20px;
+      padding: 4px 10px;
+      font-size: 0.78rem;
+      color: var(--clr-accent2);
+      margin-top: 8px;
+      cursor: pointer;
+      transition: background var(--transition);
+    }
+
+    .detail-location-chip:hover { background: rgba(88,166,255,0.2); }
+
+    /* ======================================================
+       STATS PANEL
+       ====================================================== */
+    #stats-panel {
+      position: absolute;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%) translateY(calc(100% + 20px));
+      background: var(--clr-surface);
+      border: 1px solid var(--clr-border);
+      border-radius: var(--panel-radius);
+      padding: 14px 20px;
+      z-index: 998;
+      display: flex;
+      gap: 28px;
+      transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+      min-width: 400px;
+    }
+
+    #stats-panel.open { transform: translateX(-50%) translateY(0); }
+
+    .stat-item { text-align: center; }
+    .stat-value { font-size: 1.4rem; font-weight: 700; color: var(--clr-accent); }
+    .stat-label { font-size: 0.68rem; color: var(--clr-text-muted); text-transform: uppercase; letter-spacing: 0.07em; margin-top: 2px; }
+
+    /* ======================================================
+       TIMELINE PANEL
+       ====================================================== */
+    #timeline-panel {
+      position: absolute;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%) translateY(calc(100% + 20px));
+      background: var(--clr-surface);
+      border: 1px solid var(--clr-border);
+      border-radius: var(--panel-radius);
+      padding: 16px 20px;
+      z-index: 998;
+      width: 500px;
+      max-width: calc(100vw - 40px);
+      transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    #timeline-panel.open { transform: translateX(-50%) translateY(0); }
+
+    #timeline-title {
+      font-size: 0.75rem;
+      color: var(--clr-text-muted);
+      margin-bottom: 10px;
+      text-align: center;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+    }
+
+    #timeline-track {
+      position: relative;
+      height: 14px;
+      border-radius: 7px;
+      overflow: visible;
+      margin: 20px 0 8px;
+      background: linear-gradient(
+        to right,
+        var(--clr-triassic)   0%, var(--clr-triassic)   30%,
+        var(--clr-jurassic)   30%, var(--clr-jurassic)  55%,
+        var(--clr-cretaceous) 55%, var(--clr-cretaceous) 100%
+      );
+    }
+
+    .timeline-label {
+      position: absolute;
+      top: -18px;
+      font-size: 0.68rem;
+      color: var(--clr-text-muted);
+      transform: translateX(-50%);
+    }
+
+    .timeline-era-label {
+      position: absolute;
+      bottom: -20px;
+      font-size: 0.68rem;
+      font-weight: 600;
+    }
+
+    .timeline-era-label.triassic   { left: 15%;  color: var(--clr-triassic);   }
+    .timeline-era-label.jurassic   { left: 42%;  color: var(--clr-jurassic);   }
+    .timeline-era-label.cretaceous { left: 75%;  color: var(--clr-cretaceous); }
+
+    /* ======================================================
+       LEGEND
+       ====================================================== */
+    #legend {
+      position: absolute;
+      bottom: 20px;
+      left: 12px;
+      background: var(--clr-surface);
+      border: 1px solid var(--clr-border);
+      border-radius: var(--panel-radius);
+      padding: 10px 14px;
+      z-index: 998;
+      font-size: 0.75rem;
+    }
+
+    #legend-title {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--clr-text-muted);
+      margin-bottom: 8px;
+    }
+
+    .legend-row { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
+    .legend-dot { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
+
+    /* ======================================================
+       NOTIFICATION TOAST
+       ====================================================== */
+    #toast {
+      position: absolute;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-60px);
+      background: var(--clr-surface);
+      border: 1px solid var(--clr-border);
+      border-radius: var(--panel-radius);
+      padding: 10px 18px;
+      font-size: 0.82rem;
+      color: var(--clr-text);
+      z-index: 2000;
+      transition: transform 0.3s ease, opacity 0.3s ease;
+      opacity: 0;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+
+    #toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+    /* ======================================================
+       LOADING OVERLAY
+       ====================================================== */
+    #loading-overlay {
+      position: absolute;
+      inset: 0;
+      background: var(--clr-bg);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      transition: opacity 0.5s ease;
+    }
+
+    #loading-overlay.hidden { opacity: 0; pointer-events: none; }
+
+    .loader-dino { font-size: 4rem; animation: bounce 0.7s infinite alternate; }
+    @keyframes bounce { from { transform: translateY(0); } to { transform: translateY(-12px); } }
+
+    .loader-title { font-size: 1.6rem; font-weight: 700; color: var(--clr-accent); margin-top: 16px; }
+    .loader-sub   { font-size: 0.82rem; color: var(--clr-text-muted); margin-top: 6px; }
+
+    .loader-bar-track {
+      width: 200px;
+      height: 4px;
+      background: var(--clr-border);
+      border-radius: 2px;
+      margin-top: 20px;
+      overflow: hidden;
+    }
+
+    .loader-bar {
+      height: 100%;
+      background: var(--clr-accent);
+      border-radius: 2px;
+      width: 0%;
+      animation: load 1.5s ease forwards;
+    }
+
+    @keyframes load { to { width: 100%; } }
+
+    /* ======================================================
+       LEAFLET CUSTOM MARKERS
+       ====================================================== */
+    .dino-marker-icon {
+      background: transparent !important;
+      border: none !important;
+    }
+
+    .dino-marker-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.5);
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+      transition: transform 0.2s ease;
+    }
+
+    .dino-marker-dot.highlighted {
+      transform: scale(1.6);
+      border-color: #fff;
+      z-index: 999;
+    }
+
+    /* Leaflet popup custom style */
+    .leaflet-popup-content-wrapper {
+      background: var(--clr-surface) !important;
+      border: 1px solid var(--clr-border) !important;
+      border-radius: var(--panel-radius) !important;
+      color: var(--clr-text) !important;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important;
+    }
+
+    .leaflet-popup-tip { background: var(--clr-surface) !important; }
+
+    .leaflet-popup-content { margin: 10px 14px !important; }
+
+    .popup-title { font-size: 0.95rem; font-weight: 700; color: var(--clr-accent); }
+    .popup-sub   { font-size: 0.75rem; color: var(--clr-text-muted); margin-top: 2px; }
+    .popup-btn {
+      margin-top: 8px;
+      padding: 5px 12px;
+      background: rgba(240,136,62,0.15);
+      border: 1px solid var(--clr-accent);
+      border-radius: 5px;
+      color: var(--clr-accent);
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: background var(--transition);
+      display: inline-block;
+    }
+
+    .popup-btn:hover { background: rgba(240,136,62,0.3); }
+
+    /* ======================================================
+       RESPONSIVE
+       ====================================================== */
+    @media (max-width: 700px) {
+      #sidebar { width: 100vw; min-width: 100vw; position: absolute; top: 0; bottom: 0; left: 0; }
+      #sidebar.collapsed { margin-left: -100vw; }
+      #stats-panel { min-width: unset; width: calc(100vw - 24px); flex-wrap: wrap; gap: 16px; }
+      #timeline-panel { width: calc(100vw - 24px); }
+      #detail-panel { width: calc(100vw - 24px); right: 12px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- =====================================================
+     HTML STRUCTURE
+     ===================================================== -->
+<div id="app">
+
+  <!-- SIDEBAR -->
+  <aside id="sidebar">
+    <div id="sidebar-header">
+      <h1><span class="logo">🦕</span> DinoMap</h1>
+      <p>Explore fossil discovery sites around the world</p>
+    </div>
+
+    <div id="search-container">
+      <input type="search" id="search-input" placeholder="🔍  Search dinosaurs…" autocomplete="off" />
+    </div>
+
+    <div id="filter-container">
+      <span class="filter-label">Era</span>
+      <div class="filter-pills" id="era-pills"></div>
+      <span class="filter-label">Diet</span>
+      <div class="filter-pills" id="diet-pills"></div>
+    </div>
+
+    <div id="dino-list-container">
+      <div id="result-count"></div>
+      <div id="dino-list"></div>
+    </div>
+
+    <div id="sidebar-footer">
+      <span id="footer-count"></span> &nbsp;·&nbsp; DinoMap © 2024
+    </div>
+  </aside>
+
+  <!-- MAP -->
+  <div id="map-container">
+    <div id="map"></div>
+
+    <!-- Toggle sidebar -->
+    <button id="toggle-sidebar-btn" title="Toggle sidebar">◀</button>
+
+    <!-- Map overlay controls -->
+    <div id="map-controls">
+      <button class="map-control-btn" id="btn-stats"    title="Statistics">📊 Stats</button>
+      <button class="map-control-btn" id="btn-timeline" title="Timeline">⏳ Timeline</button>
+      <button class="map-control-btn" id="btn-cluster"  title="Toggle clustering">🗂 Cluster</button>
+      <button class="map-control-btn" id="btn-heatmap"  title="Toggle layer">🗺 Layer</button>
+      <button class="map-control-btn" id="btn-fit"      title="Fit all markers">🎯 Fit All</button>
+    </div>
+
+    <!-- Stats panel -->
+    <div id="stats-panel">
+      <div class="stat-item"><div class="stat-value" id="stat-total">0</div><div class="stat-label">Total Dinos</div></div>
+      <div class="stat-item"><div class="stat-value" id="stat-triassic">0</div><div class="stat-label">Triassic</div></div>
+      <div class="stat-item"><div class="stat-value" id="stat-jurassic">0</div><div class="stat-label">Jurassic</div></div>
+      <div class="stat-item"><div class="stat-value" id="stat-cretaceous">0</div><div class="stat-label">Cretaceous</div></div>
+      <div class="stat-item"><div class="stat-value" id="stat-countries">0</div><div class="stat-label">Countries</div></div>
+    </div>
+
+    <!-- Timeline panel -->
+    <div id="timeline-panel">
+      <div id="timeline-title">Mesozoic Era Timeline (millions of years ago)</div>
+      <div id="timeline-track">
+        <span class="timeline-label" style="left:0%">252</span>
+        <span class="timeline-label" style="left:30%">201</span>
+        <span class="timeline-label" style="left:55%">145</span>
+        <span class="timeline-label" style="left:100%">66</span>
+        <span class="timeline-era-label triassic">Triassic</span>
+        <span class="timeline-era-label jurassic">Jurassic</span>
+        <span class="timeline-era-label cretaceous">Cretaceous</span>
+      </div>
+    </div>
+
+    <!-- Legend -->
+    <div id="legend">
+      <div id="legend-title">Era</div>
+      <div class="legend-row"><div class="legend-dot" style="background:var(--clr-triassic)"></div>   <span>Triassic</span></div>
+      <div class="legend-row"><div class="legend-dot" style="background:var(--clr-jurassic)"></div>   <span>Jurassic</span></div>
+      <div class="legend-row"><div class="legend-dot" style="background:var(--clr-cretaceous)"></div> <span>Cretaceous</span></div>
+    </div>
+
+    <!-- Detail panel -->
+    <div id="detail-panel">
+      <button id="detail-close">✕</button>
+      <div id="detail-content"></div>
+    </div>
+
+    <!-- Toast notification -->
+    <div id="toast"></div>
+
+    <!-- Loading overlay -->
+    <div id="loading-overlay">
+      <div class="loader-dino">🦖</div>
+      <div class="loader-title">DinoMap</div>
+      <div class="loader-sub">Loading fossil discovery data…</div>
+      <div class="loader-bar-track"><div class="loader-bar"></div></div>
+    </div>
+  </div>
+
+</div><!-- end #app -->
+
+<!-- Leaflet JS -->
+<script src="vendor/leaflet.js"></script>
+<!-- Leaflet MarkerCluster JS -->
+<script src="vendor/leaflet.markercluster.js"></script>
+
+<script>
+'use strict';
+
+/* ============================================================
+   AGENT 1 – DATA AGENT
+   Responsibilities:
+     • Store the canonical dinosaur fossil dataset
+     • Provide CRUD-style query helpers (getAll, getById, query)
+     • Emit "data:ready" on the event bus after initialisation
+     • Compute derived statistics (era counts, country counts, etc.)
+   ============================================================ */
+class DataAgent {
+  constructor(bus) {
+    this._bus  = bus;
+    this._data = [];
+    this._idx  = {};   // id → record fast lookup
+  }
+
+  /* ── initialise ─────────────────────────────────────────── */
+  init() {
+    this._data = this._buildDataset();
+    this._buildIndex();
+    this._bus.emit('data:ready', { count: this._data.length });
+  }
+
+  /* ── public query API ────────────────────────────────────── */
+  getAll()       { return this._data; }
+  getById(id)    { return this._idx[id] || null; }
+  count()        { return this._data.length; }
+
+  query({ search = '', era = 'All', diet = 'All' } = {}) {
+    const q = (search || '').toLowerCase().trim();
+    return this._data.filter(d => {
+      if (era  !== 'All' && d.era  !== era)  return false;
+      if (diet !== 'All' && d.diet !== diet) return false;
+      if (q) {
+        return d.name.toLowerCase().includes(q)       ||
+               d.meaning.toLowerCase().includes(q)    ||
+               d.location.toLowerCase().includes(q)   ||
+               d.country.toLowerCase().includes(q)    ||
+               d.description.toLowerCase().includes(q);
+      }
+      return true;
+    });
+  }
+
+  getStats() {
+    const total      = this._data.length;
+    const triassic   = this._data.filter(d => d.era === 'Triassic').length;
+    const jurassic   = this._data.filter(d => d.era === 'Jurassic').length;
+    const cretaceous = this._data.filter(d => d.era === 'Cretaceous').length;
+    const countries  = new Set(this._data.map(d => d.country)).size;
+    const byClade    = this._groupBy('clade');
+    const byDiet     = this._groupBy('diet');
+    return { total, triassic, jurassic, cretaceous, countries, byClade, byDiet };
+  }
+
+  getEras()  { return ['All', ...new Set(this._data.map(d => d.era))];  }
+  getDiets() { return ['All', ...new Set(this._data.map(d => d.diet))]; }
+
+  /* ── private helpers ─────────────────────────────────────── */
+  _buildIndex() {
+    this._idx = {};
+    this._data.forEach(d => { this._idx[d.id] = d; });
+  }
+
+  _groupBy(key) {
+    return this._data.reduce((acc, d) => {
+      acc[d[key]] = (acc[d[key]] || 0) + 1;
+      return acc;
+    }, {});
+  }
+
+  /* ── DATASET ─────────────────────────────────────────────── */
+  _buildDataset() {
+    return [
+      /* ——— Triassic ——— */
+      {
+        id: 'coelophysis', name: 'Coelophysis', pronunciation: 'see-lo-FY-sis',
+        meaning: 'Hollow form', era: 'Triassic', period: '228–201 Ma',
+        diet: 'Carnivore', clade: 'Theropoda', length: '3 m', weight: '15–25 kg',
+        lat: 36.757, lng: -108.227,
+        location: 'Ghost Ranch, New Mexico', country: 'USA',
+        icon: '🦎',
+        description: 'One of the earliest known dinosaurs, Coelophysis was a small, ' +
+          'lightly built predator. Hundreds of specimens were discovered at Ghost Ranch, ' +
+          'New Mexico, making it one of the most completely known early dinosaurs.',
+      },
+      {
+        id: 'eoraptor', name: 'Eoraptor', pronunciation: 'EE-oh-RAP-tor',
+        meaning: 'Dawn plunderer', era: 'Triassic', period: '231 Ma',
+        diet: 'Omnivore', clade: 'Sauropodomorpha', length: '1 m', weight: '10 kg',
+        lat: -30.0, lng: -68.4,
+        location: 'Ischigualasto Formation, San Juan', country: 'Argentina',
+        icon: '🦎',
+        description: 'One of the oldest known dinosaurs, Eoraptor lived during the dawn ' +
+          'of the Dinosaur Age. Its mixed diet and generalised body plan hint at the ancestral ' +
+          'form from which all later dinosaur lineages diverged.',
+      },
+      {
+        id: 'herrerasaurus', name: 'Herrerasaurus', pronunciation: 'heh-RAIR-ah-SAW-rus',
+        meaning: 'Herrera\'s lizard', era: 'Triassic', period: '231 Ma',
+        diet: 'Carnivore', clade: 'Herrerasauridae', length: '4–6 m', weight: '210–350 kg',
+        lat: -29.9, lng: -68.5,
+        location: 'Ischigualasto Formation, San Juan', country: 'Argentina',
+        icon: '🦖',
+        description: 'An early predatory dinosaur, Herrerasaurus was one of the first large ' +
+          'carnivorous dinosaurs. Its mix of primitive and derived features has made it central ' +
+          'to debates about early dinosaur evolution.',
+      },
+      {
+        id: 'plateosaurus', name: 'Plateosaurus', pronunciation: 'plat-ee-oh-SAW-rus',
+        meaning: 'Broad lizard', era: 'Triassic', period: '214–204 Ma',
+        diet: 'Herbivore', clade: 'Sauropodomorpha', length: '5–10 m', weight: '600–4000 kg',
+        lat: 48.5, lng: 9.0,
+        location: 'Trossingen, Baden-Württemberg', country: 'Germany',
+        icon: '🦕',
+        description: 'Plateosaurus is one of the first large dinosaurs ever to have existed. ' +
+          'It was a prosauropod – an early relative of the giant long-necked sauropods – ' +
+          'and could rear up on its hind legs to browse high vegetation.',
+      },
+      {
+        id: 'mussaurus', name: 'Mussaurus', pronunciation: 'moo-SAW-rus',
+        meaning: 'Mouse lizard', era: 'Triassic', period: '215–205 Ma',
+        diet: 'Herbivore', clade: 'Sauropodomorpha', length: '3 m (adult)', weight: '70 kg',
+        lat: -51.5, lng: -69.2,
+        location: 'El Tranquilo Formation, Santa Cruz', country: 'Argentina',
+        icon: '🦕',
+        description: 'Mussaurus was originally described from tiny hatchlings, giving it its ' +
+          'charming name. Adults were larger prosauropods. Recent analyses suggest it may have ' +
+          'had herd behaviour, with adults guarding communal nesting sites.',
+      },
+
+      /* ——— Jurassic ——— */
+      {
+        id: 'brachiosaurus', name: 'Brachiosaurus', pronunciation: 'BRACK-ee-oh-SAW-rus',
+        meaning: 'Arm lizard', era: 'Jurassic', period: '154–150 Ma',
+        diet: 'Herbivore', clade: 'Sauropoda', length: '26 m', weight: '28,000–58,000 kg',
+        lat: 38.985, lng: -108.502,
+        location: 'Morrison Formation, Colorado', country: 'USA',
+        icon: '🦕',
+        description: 'One of the largest animals ever to walk the Earth, Brachiosaurus is ' +
+          'recognisable by its very long neck and forelimbs longer than its hind limbs. ' +
+          'It could reach vegetation more than 9 metres off the ground.',
+      },
+      {
+        id: 'giraffatitan', name: 'Giraffatitan', pronunciation: 'jih-RAF-ah-TY-tan',
+        meaning: 'Giant giraffe', era: 'Jurassic', period: '150–145 Ma',
+        diet: 'Herbivore', clade: 'Sauropoda', length: '22 m', weight: '23,300 kg',
+        lat: -8.8, lng: 34.7,
+        location: 'Tendaguru Formation, Lindi Region', country: 'Tanzania',
+        icon: '🦕',
+        description: 'Once classified as an African species of Brachiosaurus, Giraffatitan ' +
+          'was reclassified as its own genus. It is among the most completely known sauropods ' +
+          'and provides the basis for the famous Berlin Brachiosaurus mount.',
+      },
+      {
+        id: 'stegosaurus', name: 'Stegosaurus', pronunciation: 'STEG-oh-SAW-rus',
+        meaning: 'Roof lizard', era: 'Jurassic', period: '155–150 Ma',
+        diet: 'Herbivore', clade: 'Stegosauria', length: '9 m', weight: '5,000–7,000 kg',
+        lat: 39.15, lng: -108.72,
+        location: 'Morrison Formation, Colorado', country: 'USA',
+        icon: '🦕',
+        description: 'Famous for the large bony plates along its back and the spikes on its tail, ' +
+          'Stegosaurus is one of the most recognisable dinosaurs. The plates may have been used ' +
+          'for thermoregulation or display.',
+      },
+      {
+        id: 'diplodocus', name: 'Diplodocus', pronunciation: 'dip-LOD-oh-kus',
+        meaning: 'Double beam', era: 'Jurassic', period: '154–152 Ma',
+        diet: 'Herbivore', clade: 'Sauropoda', length: '24–26 m', weight: '11,000–17,600 kg',
+        lat: 42.87, lng: -108.88,
+        location: 'Morrison Formation, Wyoming', country: 'USA',
+        icon: '🦕',
+        description: 'With a famously long, whip-like tail and extremely elongated neck, ' +
+          'Diplodocus is one of the longest animals ever discovered. It used its peg-like ' +
+          'teeth to strip vegetation from branches.',
+      },
+      {
+        id: 'allosaurus', name: 'Allosaurus', pronunciation: 'AL-oh-SAW-rus',
+        meaning: 'Different lizard', era: 'Jurassic', period: '155–145 Ma',
+        diet: 'Carnivore', clade: 'Theropoda', length: '8.5–9.7 m', weight: '1,500–2,000 kg',
+        lat: 39.49, lng: -109.31,
+        location: 'Morrison Formation, Utah', country: 'USA',
+        icon: '🦖',
+        description: 'The apex predator of the Late Jurassic, Allosaurus was a large, ' +
+          'bipedal theropod with large forelimbs bearing three clawed fingers. It likely ' +
+          'ambushed prey using its skull as a hatchet.',
+      },
+      {
+        id: 'ceratosaurus', name: 'Ceratosaurus', pronunciation: 'seh-RAT-oh-SAW-rus',
+        meaning: 'Horned lizard', era: 'Jurassic', period: '153–148 Ma',
+        diet: 'Carnivore', clade: 'Theropoda', length: '5.3–7 m', weight: '500–700 kg',
+        lat: 39.3, lng: -107.9,
+        location: 'Morrison Formation, Colorado', country: 'USA',
+        icon: '🦖',
+        description: 'Distinguished by a prominent nasal horn and smaller horns above its eyes, ' +
+          'Ceratosaurus was a fearsome mid-sized predator that shared its world with Allosaurus ' +
+          'and Stegosaurus.',
+      },
+      {
+        id: 'archaeopteryx', name: 'Archaeopteryx', pronunciation: 'ar-kee-OP-ter-iks',
+        meaning: 'Ancient wing', era: 'Jurassic', period: '150 Ma',
+        diet: 'Carnivore', clade: 'Avialae', length: '0.5 m', weight: '0.8–1 kg',
+        lat: 48.88, lng: 11.03,
+        location: 'Solnhofen Limestone, Bavaria', country: 'Germany',
+        icon: '🐦',
+        description: 'A transitional fossil between non-avian dinosaurs and modern birds, ' +
+          'Archaeopteryx had both bird-like (feathers, wishbone) and dinosaur-like (teeth, clawed ' +
+          'wings, bony tail) features. It remains one of the most important fossils ever found.',
+      },
+      {
+        id: 'camarasaurus', name: 'Camarasaurus', pronunciation: 'KAM-ah-rah-SAW-rus',
+        meaning: 'Chambered lizard', era: 'Jurassic', period: '155–145 Ma',
+        diet: 'Herbivore', clade: 'Sauropoda', length: '15–23 m', weight: '47,000 kg',
+        lat: 39.76, lng: -107.81,
+        location: 'Morrison Formation, Colorado', country: 'USA',
+        icon: '🦕',
+        description: 'The most abundant large dinosaur in the Morrison Formation, Camarasaurus ' +
+          'had a shorter neck and blunter snout than other sauropods. Its spoon-shaped teeth ' +
+          'could process tougher vegetation.',
+      },
+      {
+        id: 'kentrosaurus', name: 'Kentrosaurus', pronunciation: 'KEN-troh-SAW-rus',
+        meaning: 'Spiked lizard', era: 'Jurassic', period: '155–150 Ma',
+        diet: 'Herbivore', clade: 'Stegosauria', length: '4.5 m', weight: '320 kg',
+        lat: -8.85, lng: 34.68,
+        location: 'Tendaguru Formation, Lindi Region', country: 'Tanzania',
+        icon: '🦕',
+        description: 'An African relative of Stegosaurus, Kentrosaurus bore a series of paired ' +
+          'plates on its neck and shoulders that gave way to long spikes along its back and tail. ' +
+          'Its shoulder spikes may have deterred large predators.',
+      },
+      {
+        id: 'yangchuanosaurus', name: 'Yangchuanosaurus', pronunciation: 'yang-CHWAN-oh-SAW-rus',
+        meaning: 'Yangchuan lizard', era: 'Jurassic', period: '163–145 Ma',
+        diet: 'Carnivore', clade: 'Theropoda', length: '8–11 m', weight: '1,800–3,400 kg',
+        lat: 29.37, lng: 105.44,
+        location: 'Dashanpu Formation, Sichuan', country: 'China',
+        icon: '🦖',
+        description: 'The apex predator of Jurassic China, Yangchuanosaurus is the largest known ' +
+          'carnivorous dinosaur from the Jurassic of Asia. Multiple specimens have been found in ' +
+          'the remarkably rich Dashanpu Formation quarry.',
+      },
+      {
+        id: 'mamenchisaurus', name: 'Mamenchisaurus', pronunciation: 'mah-MEN-chee-SAW-rus',
+        meaning: 'Mamenchi lizard', era: 'Jurassic', period: '160–145 Ma',
+        diet: 'Herbivore', clade: 'Sauropoda', length: '21–26 m', weight: '30,000–70,000 kg',
+        lat: 29.55, lng: 104.97,
+        location: 'Shaximiao Formation, Sichuan', country: 'China',
+        icon: '🦕',
+        description: 'Known for possessing one of the longest necks of any known animal (up to ' +
+          '14 metres), Mamenchisaurus is a staple of Jurassic Chinese dinosaur faunas. Its neck ' +
+          'vertebrae are among the most elongated ever recorded.',
+      },
+
+      /* ——— Cretaceous ——— */
+      {
+        id: 'tyrannosaurus', name: 'Tyrannosaurus rex', pronunciation: 'ty-RAN-oh-SAW-rus RECKS',
+        meaning: 'Tyrant lizard king', era: 'Cretaceous', period: '68–66 Ma',
+        diet: 'Carnivore', clade: 'Theropoda', length: '12–13 m', weight: '8,000–14,000 kg',
+        lat: 47.9, lng: -104.2,
+        location: 'Hell Creek Formation, Montana', country: 'USA',
+        icon: '🦖',
+        description: 'The most famous dinosaur of all time, T. rex was one of the largest land ' +
+          'predators ever. Its powerful jaws could exert more force than any other terrestrial ' +
+          'animal and its serrated teeth could crush bone with ease.',
+      },
+      {
+        id: 'triceratops', name: 'Triceratops', pronunciation: 'try-SAIR-ah-tops',
+        meaning: 'Three-horned face', era: 'Cretaceous', period: '68–66 Ma',
+        diet: 'Herbivore', clade: 'Ceratopsia', length: '8–9 m', weight: '6,000–12,000 kg',
+        lat: 43.76, lng: -104.82,
+        location: 'Lance Formation, Wyoming', country: 'USA',
+        icon: '🦕',
+        description: 'One of the last and most recognisable of all the dinosaurs, Triceratops ' +
+          'bore three facial horns and a large bony frill. It was a contemporary of T. rex and ' +
+          'may have used its horns in combat with rivals of its own species.',
+      },
+      {
+        id: 'velociraptor', name: 'Velociraptor', pronunciation: 'vel-OS-ih-RAP-tor',
+        meaning: 'Swift thief', era: 'Cretaceous', period: '75–71 Ma',
+        diet: 'Carnivore', clade: 'Theropoda', length: '1.8–2.1 m', weight: '14.3–19.7 kg',
+        lat: 44.1, lng: 103.7,
+        location: 'Djadochta Formation, Ömnögovi', country: 'Mongolia',
+        icon: '🦖',
+        description: 'Far smaller than its film depiction, the real Velociraptor was about the ' +
+          'size of a turkey and was covered in feathers. Its sickle-shaped killing claw on each ' +
+          'hind foot was used to pin prey rather than slash.',
+      },
+      {
+        id: 'spinosaurus', name: 'Spinosaurus', pronunciation: 'SPY-no-SAW-rus',
+        meaning: 'Spine lizard', era: 'Cretaceous', period: '99–93.5 Ma',
+        diet: 'Piscivore', clade: 'Theropoda', length: '14–18 m', weight: '7,000–20,900 kg',
+        lat: 27.2, lng: 30.8,
+        location: 'Bahariya Formation, Matrouh', country: 'Egypt',
+        icon: '🦖',
+        description: 'Likely the largest carnivorous dinosaur ever, Spinosaurus bore a tall ' +
+          'neural spine sail along its back. Recent studies suggest it was semi-aquatic, wading ' +
+          'into rivers to catch large fish with its crocodile-like snout.',
+      },
+      {
+        id: 'ankylosaurus', name: 'Ankylosaurus', pronunciation: 'ANG-kee-loh-SAW-rus',
+        meaning: 'Fused lizard', era: 'Cretaceous', period: '68–66 Ma',
+        diet: 'Herbivore', clade: 'Ankylosauria', length: '6–8 m', weight: '4,800–8,000 kg',
+        lat: 48.2, lng: -104.5,
+        location: 'Hell Creek Formation, Montana', country: 'USA',
+        icon: '🦕',
+        description: 'The ultimate armoured dinosaur, Ankylosaurus was covered in bony plates ' +
+          'called osteoderms and ended in a massive clubbed tail capable of shattering bone. ' +
+          'Even T. rex would have struggled to tackle a fully grown adult.',
+      },
+      {
+        id: 'pachycephalosaurus', name: 'Pachycephalosaurus', pronunciation: 'pak-ee-SEF-ah-loh-SAW-rus',
+        meaning: 'Thick-headed lizard', era: 'Cretaceous', period: '70–66 Ma',
+        diet: 'Omnivore', clade: 'Pachycephalosauria', length: '4.5 m', weight: '450 kg',
+        lat: 45.8, lng: -103.4,
+        location: 'Hell Creek Formation, South Dakota', country: 'USA',
+        icon: '🦕',
+        description: 'Renowned for its domed skull up to 25 cm thick, Pachycephalosaurus is ' +
+          'believed to have used its reinforced head in head-butting contests with rivals, ' +
+          'similar to modern mountain goats.',
+      },
+      {
+        id: 'parasaurolophus', name: 'Parasaurolophus', pronunciation: 'par-ah-saw-ROL-oh-fus',
+        meaning: 'Near crested lizard', era: 'Cretaceous', period: '76.5–73 Ma',
+        diet: 'Herbivore', clade: 'Ornithopoda', length: '9.5 m', weight: '2,500–3,500 kg',
+        lat: 36.72, lng: -108.32,
+        location: 'Kirtland Formation, New Mexico', country: 'USA',
+        icon: '🦕',
+        description: 'The elaborately crested hadrosaur Parasaurolophus used its hollow, ' +
+          'tube-like crest to produce resonant low-frequency calls, possibly to communicate ' +
+          'with herd members or as a display structure.',
+      },
+      {
+        id: 'edmontosaurus', name: 'Edmontosaurus', pronunciation: 'ed-MON-toh-SAW-rus',
+        meaning: 'Edmonton lizard', era: 'Cretaceous', period: '73–66 Ma',
+        diet: 'Herbivore', clade: 'Ornithopoda', length: '9–13 m', weight: '4,000 kg',
+        lat: 53.5, lng: -113.5,
+        location: 'Horseshoe Canyon Formation, Alberta', country: 'Canada',
+        icon: '🦕',
+        description: 'One of the largest hadrosaurs, Edmontosaurus is known from "mummified" ' +
+          'specimens preserving skin impressions, tendons, and even stomach contents. It was ' +
+          'one of the most abundant dinosaurs at the end of the Cretaceous.',
+      },
+      {
+        id: 'iguanodon', name: 'Iguanodon', pronunciation: 'ig-WAN-oh-don',
+        meaning: 'Iguana tooth', era: 'Cretaceous', period: '126–122 Ma',
+        diet: 'Herbivore', clade: 'Ornithopoda', length: '9–10 m', weight: '3,000–3,500 kg',
+        lat: 50.38, lng: 3.63,
+        location: 'Bernissart Coal Mine, Hainaut', country: 'Belgium',
+        icon: '🦕',
+        description: 'One of the first dinosaurs ever described, Iguanodon was a large ' +
+          'herbivore whose distinctive thumb spike was initially mistaken for a nose horn. ' +
+          '38 near-complete skeletons were discovered in a Belgian coal mine in 1878.',
+      },
+      {
+        id: 'giganotosaurus', name: 'Giganotosaurus', pronunciation: 'jig-ah-NO-toh-SAW-rus',
+        meaning: 'Giant southern lizard', era: 'Cretaceous', period: '99.6–95 Ma',
+        diet: 'Carnivore', clade: 'Theropoda', length: '12–13 m', weight: '6,000–13,800 kg',
+        lat: -43.5, lng: -67.5,
+        location: 'Candeleros Formation, Neuquén', country: 'Argentina',
+        icon: '🦖',
+        description: 'One of the largest known meat-eating dinosaurs, Giganotosaurus slightly ' +
+          'exceeded T. rex in length though its skull was more slender. It may have been a ' +
+          'pack hunter targeting giant titanosaur sauropods.',
+      },
+      {
+        id: 'argentinosaurus', name: 'Argentinosaurus', pronunciation: 'ar-gen-TEE-no-SAW-rus',
+        meaning: 'Argentina lizard', era: 'Cretaceous', period: '96–92 Ma',
+        diet: 'Herbivore', clade: 'Sauropoda', length: '30–40 m', weight: '65,000–80,000 kg',
+        lat: -39.6, lng: -68.9,
+        location: 'Huincul Formation, Neuquén', country: 'Argentina',
+        icon: '🦕',
+        description: 'Possibly the largest dinosaur (and animal) that ever lived, Argentinosaurus ' +
+          'is known primarily from enormous back vertebrae and limb bones. A single vertebra stands ' +
+          '1.5 metres tall. Its true size remains debated.',
+      },
+      {
+        id: 'mosasaurus', name: 'Mosasaurus', pronunciation: 'MOH-zah-SAW-rus',
+        meaning: 'Meuse lizard', era: 'Cretaceous', period: '82–66 Ma',
+        diet: 'Carnivore', clade: 'Mosasauridae', length: '13–18 m', weight: '14,000 kg',
+        lat: 50.85, lng: 5.69,
+        location: 'Sint Pietersberg Quarry, Maastricht', country: 'Netherlands',
+        icon: '🐊',
+        description: 'A giant marine lizard (not technically a dinosaur), Mosasaurus was the ' +
+          'apex predator of Late Cretaceous seas. The first fossils were discovered in 1764 near ' +
+          'the Meuse (Latin: Mosa) River in the Netherlands, making it one of the first prehistoric ' +
+          'reptiles ever described.',
+      },
+      {
+        id: 'pteranodon', name: 'Pteranodon', pronunciation: 'teh-RAN-oh-don',
+        meaning: 'Winged and toothless', era: 'Cretaceous', period: '86–84.5 Ma',
+        diet: 'Piscivore', clade: 'Pterosauria', length: '1.8 m (body)', weight: '25–93 kg',
+        lat: 39.0, lng: -98.0,
+        location: 'Niobrara Formation, Kansas', country: 'USA',
+        icon: '🐦',
+        description: 'The most famous pterosaur, Pteranodon soared over the Western Interior ' +
+          'Seaway with a wingspan of up to 7.25 metres. It lacked teeth and may have fished like ' +
+          'a modern pelican. Despite its fame, it was not a dinosaur.',
+      },
+      {
+        id: 'therizinosaurus', name: 'Therizinosaurus', pronunciation: 'THAIR-ih-ZY-no-SAW-rus',
+        meaning: 'Scythe lizard', era: 'Cretaceous', period: '70 Ma',
+        diet: 'Herbivore', clade: 'Theropoda', length: '9–10 m', weight: '3,000–5,000 kg',
+        lat: 43.0, lng: 103.0,
+        location: 'Nemegt Formation, Ömnögovi', country: 'Mongolia',
+        icon: '🦕',
+        description: 'Possessing the longest claws of any known animal (up to 70 cm), ' +
+          'Therizinosaurus was paradoxically a herbivore, using those fearsome claws to pull ' +
+          'down tree branches. It is one of the most bizarre-looking theropods.',
+      },
+      {
+        id: 'oviraptor', name: 'Oviraptor', pronunciation: 'oh-vih-RAP-tor',
+        meaning: 'Egg thief', era: 'Cretaceous', period: '75–71 Ma',
+        diet: 'Omnivore', clade: 'Theropoda', length: '1.6–2 m', weight: '25–35 kg',
+        lat: 44.0, lng: 103.5,
+        location: 'Djadochta Formation, Ömnögovi', country: 'Mongolia',
+        icon: '🦎',
+        description: 'Wrongly accused of stealing eggs when first found atop a nest, Oviraptor ' +
+          'was later vindicated — the eggs belonged to Oviraptor itself, and it was actually ' +
+          'brooding them. Its bony crest may have been used for display.',
+      },
+      {
+        id: 'carnotaurus', name: 'Carnotaurus', pronunciation: 'KAR-no-TOR-us',
+        meaning: 'Flesh-eating bull', era: 'Cretaceous', period: '72–69.9 Ma',
+        diet: 'Carnivore', clade: 'Theropoda', length: '7.5–9 m', weight: '1,350–2,100 kg',
+        lat: -43.8, lng: -66.5,
+        location: 'La Colonia Formation, Chubut', country: 'Argentina',
+        icon: '🦖',
+        description: 'Known for the pair of horns above its eyes and remarkably tiny, vestigial ' +
+          'forelimbs (even smaller than T. rex\'s), Carnotaurus is an iconic South American ' +
+          'predator with well-preserved skin impressions showing a bumpy texture.',
+      },
+      {
+        id: 'carcharodontosaurus', name: 'Carcharodontosaurus', pronunciation: 'kar-KAR-oh-DON-toh-SAW-rus',
+        meaning: 'Shark-toothed lizard', era: 'Cretaceous', period: '99–94 Ma',
+        diet: 'Carnivore', clade: 'Theropoda', length: '12–13 m', weight: '6,000–15,100 kg',
+        lat: 33.6, lng: -5.0,
+        location: 'Kem Kem Beds, Errachidia', country: 'Morocco',
+        icon: '🦖',
+        description: 'The "shark-toothed lizard" was one of the largest carnivorous dinosaurs ' +
+          'ever, rivalling Giganotosaurus and T. rex. Its serrated teeth resembled those of the ' +
+          'great white shark and were adapted for slicing flesh.',
+      },
+      {
+        id: 'majungasaurus', name: 'Majungasaurus', pronunciation: 'mah-JUNG-ah-SAW-rus',
+        meaning: 'Mahajanga lizard', era: 'Cretaceous', period: '70–66 Ma',
+        diet: 'Carnivore', clade: 'Theropoda', length: '5.6–8 m', weight: '1,100 kg',
+        lat: -16.0, lng: 46.5,
+        location: 'Maevarano Formation, Mahajanga', country: 'Madagascar',
+        icon: '🦖',
+        description: 'An apex predator of Madagascar\'s Late Cretaceous, Majungasaurus is best ' +
+          'known for providing the first clear evidence of intraspecific predation (cannibalism) ' +
+          'in dinosaurs. It bore a small knob-like horn on its skull.',
+      },
+      {
+        id: 'protoceratops', name: 'Protoceratops', pronunciation: 'pro-toh-SAIR-ah-tops',
+        meaning: 'First horned face', era: 'Cretaceous', period: '75–71 Ma',
+        diet: 'Herbivore', clade: 'Ceratopsia', length: '1.5–2 m', weight: '62–180 kg',
+        lat: 43.8, lng: 100.5,
+        location: 'Djadochta Formation, Ömnögovi', country: 'Mongolia',
+        icon: '🦕',
+        description: 'A small, sheep-sized ceratopsian, Protoceratops is one of the most ' +
+          'common Gobi Desert dinosaurs. Famous for the "Fighting Dinosaurs" specimen, ' +
+          'preserved locked in combat with Velociraptor.',
+      },
+      {
+        id: 'pachyrhinosaurus', name: 'Pachyrhinosaurus', pronunciation: 'PAK-ee-RY-no-SAW-rus',
+        meaning: 'Thick-nosed lizard', era: 'Cretaceous', period: '73.5–69 Ma',
+        diet: 'Herbivore', clade: 'Ceratopsia', length: '8 m', weight: '4,000 kg',
+        lat: 59.0, lng: -118.8,
+        location: 'Wapiti Formation, Alberta', country: 'Canada',
+        icon: '🦕',
+        description: 'Instead of a nose horn, Pachyrhinosaurus bore a large, rough bony mass ' +
+          'called a boss on its snout. Large bonebeds suggest it was a highly gregarious animal ' +
+          'migrating in large herds across ancient North America.',
+      },
+      {
+        id: 'baryonyx', name: 'Baryonyx', pronunciation: 'bar-ee-ON-iks',
+        meaning: 'Heavy claw', era: 'Cretaceous', period: '130–125 Ma',
+        diet: 'Piscivore', clade: 'Theropoda', length: '7.5–10 m', weight: '1,200–1,700 kg',
+        lat: 51.1, lng: -0.4,
+        location: 'Weald Clay Formation, Surrey', country: 'UK',
+        icon: '🦖',
+        description: 'Discovered in 1983 in a Surrey clay pit, Baryonyx had crocodile-like jaws ' +
+          'and fish scales in its stomach, confirming it was a specialist fish-eater. Its massive ' +
+          'thumb claw may have been used to hook fish from rivers.',
+      },
+      {
+        id: 'hypsilophodon', name: 'Hypsilophodon', pronunciation: 'HIP-sih-LOF-oh-don',
+        meaning: 'Hypsilophus tooth', era: 'Cretaceous', period: '130–125 Ma',
+        diet: 'Herbivore', clade: 'Ornithopoda', length: '1.5–2.3 m', weight: '20–70 kg',
+        lat: 50.67, lng: -1.36,
+        location: 'Wessex Formation, Isle of Wight', country: 'UK',
+        icon: '🦎',
+        description: 'A small, lightly built ornithopod from early Cretaceous England, ' +
+          'Hypsilophodon was once thought to be a tree-climber. It is now understood to have ' +
+          'been a fast-running ground-dwelling browser.',
+      },
+      {
+        id: 'saltasaurus', name: 'Saltasaurus', pronunciation: 'sal-TAH-SAW-rus',
+        meaning: 'Salta lizard', era: 'Cretaceous', period: '83–66 Ma',
+        diet: 'Herbivore', clade: 'Sauropoda', length: '12.2 m', weight: '7,000 kg',
+        lat: -24.5, lng: -64.2,
+        location: 'Lecho Formation, Salta Province', country: 'Argentina',
+        icon: '🦕',
+        description: 'A titanosaur sauropod unique for its armour plating — small bony nodes ' +
+          'embedded in its skin — Saltasaurus overturned the assumption that sauropods were ' +
+          'unarmoured. Several nesting sites with eggs have been discovered nearby.',
+      },
+      {
+        id: 'sinornithosaurus', name: 'Sinornithosaurus', pronunciation: 'sy-nor-NITH-oh-SAW-rus',
+        meaning: 'Chinese bird lizard', era: 'Cretaceous', period: '125 Ma',
+        diet: 'Carnivore', clade: 'Theropoda', length: '1 m', weight: '0.5–1.5 kg',
+        lat: 41.7, lng: 120.8,
+        location: 'Yixian Formation, Liaoning', country: 'China',
+        icon: '🐦',
+        description: 'One of the first feathered dromaeosaurs discovered in China, Sinornithosaurus ' +
+          'provides evidence that feathers were widespread among small theropods. It has also been ' +
+          'controversially proposed to have had venomous fangs.',
+      },
+      {
+        id: 'sinosauropteryx', name: 'Sinosauropteryx', pronunciation: 'sy-no-saw-ROP-ter-iks',
+        meaning: 'Chinese lizard wing', era: 'Cretaceous', period: '130–125 Ma',
+        diet: 'Carnivore', clade: 'Theropoda', length: '0.9–1.07 m', weight: '0.55 kg',
+        lat: 41.5, lng: 120.9,
+        location: 'Yixian Formation, Liaoning', country: 'China',
+        icon: '🦎',
+        description: 'The first non-avian dinosaur discovered with evidence of feathers, ' +
+          'Sinosauropteryx made headlines in 1996 as proof that feathers evolved in dinosaurs ' +
+          'before birds. Preserved pigment cells even show it had reddish-brown and white banding.',
+      },
+    ];
+  }
+}
+
+
+/* ============================================================
+   AGENT 2 – MAP AGENT
+   Responsibilities:
+     • Initialise and manage the Leaflet map
+     • Render, update, and remove marker layers
+     • Handle marker clustering toggle
+     • Manage tile layer switching
+     • Expose flyTo / fitBounds / highlightMarker APIs
+     • Emit map interaction events to the bus
+   ============================================================ */
+class MapAgent {
+  constructor(bus) {
+    this._bus            = bus;
+    this._map            = null;
+    this._markerLayer    = null;
+    this._clusterGroup   = null;
+    this._markers        = {};     // id → Leaflet marker
+    this._clusterEnabled = true;
+    this._layers         = {};
+    this._currentTile    = 'dark';
+  }
+
+  /* ── initialise ─────────────────────────────────────────── */
+  init() {
+    this._map = L.map('map', {
+      center:        [20, 0],
+      zoom:          3,
+      minZoom:       2,
+      maxBounds:     [[-90, -180], [90, 180]],
+      maxBoundsViscosity: 1.0,
+      zoomControl:   false,
+    });
+
+    L.control.zoom({ position: 'bottomright' }).addTo(this._map);
+
+    this._buildTileLayers();
+    this._layers[this._currentTile].addTo(this._map);
+
+    // cluster group
+    this._clusterGroup = L.markerClusterGroup({
+      maxClusterRadius: 50,
+      spiderfyOnMaxZoom: true,
+      showCoverageOnHover: false,
+      iconCreateFunction: (cluster) => this._createClusterIcon(cluster),
+    });
+
+    this._markerLayer = L.layerGroup();
+
+    this._map.on('click', () => this._bus.emit('map:bgclick'));
+
+    this._bus.emit('map:ready');
+  }
+
+  /* ── tile layer management ──────────────────────────────── */
+  _buildTileLayers() {
+    this._layers.dark = L.tileLayer(
+      'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+      { attribution: '&copy; <a href="https://www.openstreetmap.org/">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>', subdomains: 'abcd', maxZoom: 19 }
+    );
+    this._layers.satellite = L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      { attribution: '&copy; Esri &copy; USGS', maxZoom: 19 }
+    );
+    this._layers.topo = L.tileLayer(
+      'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+      { attribution: '&copy; <a href="https://opentopomap.org/">OpenTopoMap</a>', maxZoom: 17 }
+    );
+  }
+
+  cycleLayer() {
+    const order = ['dark', 'satellite', 'topo'];
+    const next  = order[(order.indexOf(this._currentTile) + 1) % order.length];
+    this._map.removeLayer(this._layers[this._currentTile]);
+    this._layers[next].addTo(this._map);
+    this._currentTile = next;
+    const labels = { dark: '🌑 Dark', satellite: '🛰 Satellite', topo: '🗻 Topo' };
+    this._bus.emit('ui:toast', { msg: `Map layer: ${labels[next]}` });
+  }
+
+  /* ── marker creation ────────────────────────────────────── */
+  _createDotIcon(color) {
+    return L.divIcon({
+      className: 'dino-marker-icon',
+      html: `<div class="dino-marker-dot" style="background:${color}"></div>`,
+      iconSize:   [14, 14],
+      iconAnchor: [7, 7],
+    });
+  }
+
+  _createClusterIcon(cluster) {
+    const count = cluster.getChildCount();
+    const size  = count < 10 ? 32 : count < 50 ? 40 : 48;
+    return L.divIcon({
+      html: `<div style="
+        width:${size}px;height:${size}px;border-radius:50%;
+        background:rgba(240,136,62,0.85);border:2px solid rgba(255,255,255,0.4);
+        display:flex;align-items:center;justify-content:center;
+        font-size:${size > 38 ? 13 : 11}px;font-weight:700;color:#fff;
+        box-shadow:0 2px 8px rgba(0,0,0,0.5);">${count}</div>`,
+      className: '',
+      iconSize: [size, size],
+      iconAnchor: [size / 2, size / 2],
+    });
+  }
+
+  _eraColor(era) {
+    const map = { Triassic: '#e05c5c', Jurassic: '#4caf50', Cretaceous: '#2196f3' };
+    return map[era] || '#f0883e';
+  }
+
+  /* ── render markers ─────────────────────────────────────── */
+  renderMarkers(dinos) {
+    // clear existing
+    if (this._clusterEnabled) {
+      this._clusterGroup.clearLayers();
+    } else {
+      this._markerLayer.clearLayers();
+    }
+    this._markers = {};
+
+    dinos.forEach(dino => {
+      const color  = this._eraColor(dino.era);
+      const icon   = this._createDotIcon(color);
+      const marker = L.marker([dino.lat, dino.lng], { icon })
+        .bindPopup(this._buildPopupHtml(dino), {
+          maxWidth: 230,
+          className: 'dino-popup',
+        });
+
+      marker.on('click', () => {
+        this._bus.emit('map:markerclick', { id: dino.id });
+      });
+
+      this._markers[dino.id] = marker;
+
+      if (this._clusterEnabled) {
+        this._clusterGroup.addLayer(marker);
+      } else {
+        this._markerLayer.addLayer(marker);
+      }
+    });
+
+    if (this._clusterEnabled) {
+      if (!this._map.hasLayer(this._clusterGroup)) {
+        this._clusterGroup.addTo(this._map);
+      }
+    } else {
+      if (!this._map.hasLayer(this._markerLayer)) {
+        this._markerLayer.addTo(this._map);
+      }
+    }
+  }
+
+  _buildPopupHtml(dino) {
+    return `
+      <div class="popup-title">${dino.icon} ${dino.name}</div>
+      <div class="popup-sub">${dino.era} · ${dino.diet}</div>
+      <div class="popup-sub" style="margin-top:4px">📍 ${dino.location}</div>
+      <div class="popup-btn" onclick="window.__dinoManager.selectDino('${dino.id}')">
+        View details →
+      </div>`;
+  }
+
+  /* ── cluster toggle ─────────────────────────────────────── */
+  toggleCluster() {
+    this._clusterEnabled = !this._clusterEnabled;
+
+    if (this._clusterEnabled) {
+      this._map.removeLayer(this._markerLayer);
+      Object.values(this._markers).forEach(m => {
+        this._markerLayer.removeLayer(m);
+        this._clusterGroup.addLayer(m);
+      });
+      this._clusterGroup.addTo(this._map);
+    } else {
+      this._map.removeLayer(this._clusterGroup);
+      this._clusterGroup.clearLayers();
+      Object.values(this._markers).forEach(m => {
+        this._markerLayer.addLayer(m);
+      });
+      this._markerLayer.addTo(this._map);
+    }
+
+    return this._clusterEnabled;
+  }
+
+  /* ── navigation helpers ─────────────────────────────────── */
+  flyTo(lat, lng, zoom = 6) {
+    this._map.flyTo([lat, lng], zoom, { animate: true, duration: 1.2 });
+  }
+
+  fitAll(dinos) {
+    if (!dinos || dinos.length === 0) return;
+    const bounds = L.latLngBounds(dinos.map(d => [d.lat, d.lng]));
+    this._map.fitBounds(bounds, { padding: [40, 40] });
+  }
+
+  highlightMarker(id) {
+    // un-highlight all
+    document.querySelectorAll('.dino-marker-dot').forEach(el => {
+      el.classList.remove('highlighted');
+    });
+    const m = this._markers[id];
+    if (m) {
+      const el = m.getElement();
+      if (el) {
+        const dot = el.querySelector('.dino-marker-dot');
+        if (dot) dot.classList.add('highlighted');
+      }
+      m.openPopup();
+    }
+  }
+
+  closeAllPopups() {
+    this._map.closePopup();
+    document.querySelectorAll('.dino-marker-dot').forEach(el => {
+      el.classList.remove('highlighted');
+    });
+  }
+}
+
+
+/* ============================================================
+   AGENT 3 – UI AGENT
+   Responsibilities:
+     • Build and manage the sidebar list (cards)
+     • Render the detail panel for a selected dinosaur
+     • Update the stats panel
+     • Control panel open/close state (stats, timeline, detail)
+     • Toggle sidebar collapsed state
+     • Manage toast notifications
+     • Update result count and footer
+     • Emit user interaction events to the bus
+   ============================================================ */
+class UIAgent {
+  constructor(bus) {
+    this._bus          = bus;
+    this._selectedId   = null;
+    this._statsOpen    = false;
+    this._timelineOpen = false;
+    this._toastTimer   = null;
+
+    // DOM references
+    this._dinoList     = document.getElementById('dino-list');
+    this._resultCount  = document.getElementById('result-count');
+    this._footerCount  = document.getElementById('footer-count');
+    this._sidebar      = document.getElementById('sidebar');
+    this._detailPanel  = document.getElementById('detail-panel');
+    this._detailContent= document.getElementById('detail-content');
+    this._statsPanel   = document.getElementById('stats-panel');
+    this._timelinePanel= document.getElementById('timeline-panel');
+    this._toggleBtn    = document.getElementById('toggle-sidebar-btn');
+    this._toast        = document.getElementById('toast');
+  }
+
+  /* ── initialise ─────────────────────────────────────────── */
+  init() {
+    this._setupButtonHandlers();
+    this._bus.on('ui:toast', ({ msg }) => this.showToast(msg));
+  }
+
+  _setupButtonHandlers() {
+    this._toggleBtn.addEventListener('click', () => this._bus.emit('ui:togglesidebar'));
+
+    document.getElementById('detail-close').addEventListener('click', () => {
+      this._bus.emit('ui:closedetail');
+    });
+
+    document.getElementById('btn-stats').addEventListener('click', () => {
+      this._bus.emit('ui:togglestats');
+    });
+
+    document.getElementById('btn-timeline').addEventListener('click', () => {
+      this._bus.emit('ui:toggletimeline');
+    });
+
+    document.getElementById('btn-cluster').addEventListener('click', () => {
+      this._bus.emit('ui:togglecluster');
+    });
+
+    document.getElementById('btn-heatmap').addEventListener('click', () => {
+      this._bus.emit('ui:cyclelayer');
+    });
+
+    document.getElementById('btn-fit').addEventListener('click', () => {
+      this._bus.emit('ui:fitall');
+    });
+  }
+
+  /* ── sidebar list ───────────────────────────────────────── */
+  renderList(dinos, totalCount) {
+    this._dinoList.innerHTML = '';
+
+    const shown = dinos.length;
+    const total = totalCount;
+
+    this._resultCount.textContent =
+      shown === total
+        ? `${total} dinosaurs`
+        : `${shown} of ${total} dinosaurs`;
+
+    this._footerCount.textContent = `${total} fossil sites`;
+
+    if (dinos.length === 0) {
+      this._dinoList.innerHTML =
+        '<div style="padding:20px 16px;color:var(--clr-text-muted);font-size:0.82rem;text-align:center">No dinosaurs match your search.</div>';
+      return;
+    }
+
+    const fragment = document.createDocumentFragment();
+    dinos.forEach(dino => {
+      const card = this._buildCard(dino);
+      fragment.appendChild(card);
+    });
+    this._dinoList.appendChild(fragment);
+  }
+
+  _buildCard(dino) {
+    const div = document.createElement('div');
+    div.className = 'dino-card' + (dino.id === this._selectedId ? ' selected' : '');
+    div.dataset.id = dino.id;
+
+    div.innerHTML = `
+      <div class="dino-card-icon">${dino.icon}</div>
+      <div class="dino-card-info">
+        <div class="dino-card-name">${dino.name}</div>
+        <div class="dino-card-meta">📍 ${dino.location}</div>
+        <div class="dino-card-badges">
+          <span class="badge badge-${dino.era}">${dino.era}</span>
+          <span class="badge badge-${dino.diet}">${dino.diet}</span>
+        </div>
+      </div>`;
+
+    div.addEventListener('click', () => {
+      this._bus.emit('ui:cardclick', { id: dino.id });
+    });
+
+    return div;
+  }
+
+  /* ── detail panel ───────────────────────────────────────── */
+  openDetail(dino) {
+    this._selectedId = dino.id;
+
+    // update selection highlight in list
+    document.querySelectorAll('.dino-card').forEach(c => {
+      c.classList.toggle('selected', c.dataset.id === dino.id);
+    });
+
+    this._detailContent.innerHTML = this._buildDetailHtml(dino);
+
+    // wire location chip
+    const chip = this._detailContent.querySelector('.detail-location-chip');
+    if (chip) {
+      chip.addEventListener('click', () => {
+        this._bus.emit('ui:flyto', { lat: dino.lat, lng: dino.lng, id: dino.id });
+      });
+    }
+
+    this._detailPanel.classList.add('open');
+  }
+
+  closeDetail() {
+    this._selectedId = null;
+    this._detailPanel.classList.remove('open');
+    document.querySelectorAll('.dino-card').forEach(c => c.classList.remove('selected'));
+  }
+
+  _buildDetailHtml(dino) {
+    return `
+      <div class="detail-icon-row">${dino.icon}</div>
+      <div id="detail-dino-name">${dino.name}</div>
+      <div id="detail-dino-pronunciation">/${dino.pronunciation}/</div>
+
+      <div class="dino-card-badges" style="margin-bottom:4px">
+        <span class="badge badge-${dino.era}">${dino.era}</span>
+        <span class="badge badge-${dino.diet}">${dino.diet}</span>
+      </div>
+
+      <div class="detail-section">
+        <div class="detail-section-title">Vital Statistics</div>
+        <div class="detail-kv"><span class="detail-kv-key">Name meaning</span><span class="detail-kv-val">${dino.meaning}</span></div>
+        <div class="detail-kv"><span class="detail-kv-key">Period</span><span class="detail-kv-val">${dino.period}</span></div>
+        <div class="detail-kv"><span class="detail-kv-key">Clade</span><span class="detail-kv-val">${dino.clade}</span></div>
+        <div class="detail-kv"><span class="detail-kv-key">Length</span><span class="detail-kv-val">${dino.length}</span></div>
+        <div class="detail-kv"><span class="detail-kv-key">Weight</span><span class="detail-kv-val">${dino.weight}</span></div>
+      </div>
+
+      <div class="detail-section">
+        <div class="detail-section-title">About</div>
+        <div class="detail-description">${dino.description}</div>
+      </div>
+
+      <div class="detail-section">
+        <div class="detail-section-title">Discovery Site</div>
+        <div class="detail-kv"><span class="detail-kv-key">Country</span><span class="detail-kv-val">${dino.country}</span></div>
+        <div class="detail-kv"><span class="detail-kv-key">Formation</span><span class="detail-kv-val">${dino.location}</span></div>
+        <div class="detail-kv"><span class="detail-kv-key">Coordinates</span><span class="detail-kv-val">${dino.lat.toFixed(2)}°, ${dino.lng.toFixed(2)}°</span></div>
+        <div class="detail-location-chip">📍 Fly to discovery site</div>
+      </div>`;
+  }
+
+  /* ── stats panel ────────────────────────────────────────── */
+  updateStats(stats) {
+    document.getElementById('stat-total').textContent     = stats.total;
+    document.getElementById('stat-triassic').textContent  = stats.triassic;
+    document.getElementById('stat-jurassic').textContent  = stats.jurassic;
+    document.getElementById('stat-cretaceous').textContent= stats.cretaceous;
+    document.getElementById('stat-countries').textContent = stats.countries;
+  }
+
+  toggleStats() {
+    this._statsOpen = !this._statsOpen;
+    this._statsPanel.classList.toggle('open', this._statsOpen);
+    if (this._statsOpen && this._timelineOpen) this.toggleTimeline();
+    document.getElementById('btn-stats').classList.toggle('active', this._statsOpen);
+  }
+
+  toggleTimeline() {
+    this._timelineOpen = !this._timelineOpen;
+    this._timelinePanel.classList.toggle('open', this._timelineOpen);
+    if (this._timelineOpen && this._statsOpen) this.toggleStats();
+    document.getElementById('btn-timeline').classList.toggle('active', this._timelineOpen);
+  }
+
+  /* ── sidebar toggle ─────────────────────────────────────── */
+  toggleSidebar() {
+    const collapsed = this._sidebar.classList.toggle('collapsed');
+    this._toggleBtn.textContent = collapsed ? '▶' : '◀';
+  }
+
+  /* ── toast ───────────────────────────────────────────────── */
+  showToast(msg) {
+    clearTimeout(this._toastTimer);
+    this._toast.textContent = msg;
+    this._toast.classList.add('show');
+    this._toastTimer = setTimeout(() => {
+      this._toast.classList.remove('show');
+    }, 2800);
+  }
+}
+
+
+/* ============================================================
+   AGENT 4 – SEARCH & FILTER AGENT
+   Responsibilities:
+     • Manage era and diet filter state
+     • Manage search query state
+     • Build filter pill UI
+     • React to user input and emit filtered results
+     • Provide sort helpers
+   ============================================================ */
+class SearchFilterAgent {
+  constructor(bus) {
+    this._bus      = bus;
+    this._era      = 'All';
+    this._diet     = 'All';
+    this._query    = '';
+    this._debounce = null;
+  }
+
+  /* ── initialise ─────────────────────────────────────────── */
+  init(eras, diets) {
+    this._buildPills('era-pills',  eras,  'era');
+    this._buildPills('diet-pills', diets, 'diet');
+    this._setupSearch();
+    this._updatePills();
+  }
+
+  /* ── pill builder ───────────────────────────────────────── */
+  _buildPills(containerId, values, type) {
+    const container = document.getElementById(containerId);
+    container.innerHTML = '';
+    values.forEach(val => {
+      const pill = document.createElement('button');
+      pill.className    = 'pill';
+      pill.textContent  = val;
+      pill.dataset.type = type;
+      pill.dataset.val  = val;
+      pill.addEventListener('click', () => this._onPillClick(type, val));
+      container.appendChild(pill);
+    });
+  }
+
+  _onPillClick(type, val) {
+    if (type === 'era') {
+      this._era = this._era === val ? 'All' : val;
+    } else {
+      this._diet = this._diet === val ? 'All' : val;
+    }
+    this._updatePills();
+    this._emitFilter();
+  }
+
+  _updatePills() {
+    document.querySelectorAll('.pill[data-type="era"]').forEach(p => {
+      p.className = 'pill' + (p.dataset.val === this._era ? ` active-era-${this._era}` : '');
+    });
+    document.querySelectorAll('.pill[data-type="diet"]').forEach(p => {
+      p.className = 'pill' + (p.dataset.val === this._diet ? ` active-diet-${this._diet}` : '');
+    });
+  }
+
+  /* ── search ─────────────────────────────────────────────── */
+  _setupSearch() {
+    const input = document.getElementById('search-input');
+    input.addEventListener('input', (e) => {
+      clearTimeout(this._debounce);
+      this._debounce = setTimeout(() => {
+        this._query = e.target.value;
+        this._emitFilter();
+      }, 250);
+    });
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        input.value   = '';
+        this._query   = '';
+        this._emitFilter();
+      }
+    });
+  }
+
+  /* ── emit ───────────────────────────────────────────────── */
+  _emitFilter() {
+    this._bus.emit('filter:change', {
+      era:   this._era,
+      diet:  this._diet,
+      query: this._query,
+    });
+  }
+
+  /* ── sort helpers ───────────────────────────────────────── */
+  sortAlphabetically(dinos) {
+    return [...dinos].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  sortByEra(dinos) {
+    const order = { Triassic: 0, Jurassic: 1, Cretaceous: 2 };
+    return [...dinos].sort((a, b) => (order[a.era] ?? 3) - (order[b.era] ?? 3));
+  }
+
+  /* ── getters ─────────────────────────────────────────────── */
+  getState() { return { era: this._era, diet: this._diet, query: this._query }; }
+}
+
+
+/* ============================================================
+   MANAGER AGENT
+   Responsibilities:
+     • Create and wire all agents via an event bus
+     • Orchestrate initialisation sequence
+     • Route events between agents
+     • Expose public API used by popups (window.__dinoManager)
+     • Handle loading screen lifecycle
+   ============================================================ */
+class EventBus {
+  constructor() { this._listeners = {}; }
+
+  on(event, fn) {
+    if (!this._listeners[event]) this._listeners[event] = [];
+    this._listeners[event].push(fn);
+    return () => this.off(event, fn);
+  }
+
+  off(event, fn) {
+    if (this._listeners[event])
+      this._listeners[event] = this._listeners[event].filter(f => f !== fn);
+  }
+
+  emit(event, data = {}) {
+    (this._listeners[event] || []).forEach(fn => {
+      try { fn(data); } catch (e) { console.error(`[EventBus] ${event}`, e); }
+    });
+  }
+}
+
+class ManagerAgent {
+  constructor() {
+    this._bus    = new EventBus();
+    this._data   = new DataAgent(this._bus);
+    this._map    = new MapAgent(this._bus);
+    this._ui     = new UIAgent(this._bus);
+    this._filter = new SearchFilterAgent(this._bus);
+
+    this._currentDinos = [];
+  }
+
+  /* ── boot sequence ──────────────────────────────────────── */
+  async init() {
+    // 1. load data
+    this._data.init();
+
+    // 2. init UI
+    this._ui.init();
+
+    // 3. init search/filter (needs era/diet lists from data)
+    this._filter.init(this._data.getEras(), this._data.getDiets());
+
+    // 4. build stats
+    this._ui.updateStats(this._data.getStats());
+
+    // 5. wire event bus
+    this._wireEvents();
+
+    // 6. init map (async-friendly; waits for Leaflet)
+    this._map.init();
+
+    // 7. initial render
+    this._applyFilter({});
+
+    // 8. dismiss loading screen
+    await this._sleep(1600);
+    document.getElementById('loading-overlay').classList.add('hidden');
+  }
+
+  /* ── event wiring ───────────────────────────────────────── */
+  _wireEvents() {
+
+    /* Data / filter flow */
+    this._bus.on('filter:change', (state) => this._applyFilter(state));
+
+    /* Map events → UI */
+    this._bus.on('map:markerclick', ({ id }) => {
+      this.selectDino(id);
+    });
+
+    this._bus.on('map:bgclick', () => {
+      // close detail panel on empty map click
+    });
+
+    /* UI button events → Map */
+    this._bus.on('ui:togglesidebar', () => this._ui.toggleSidebar());
+    this._bus.on('ui:closedetail',   () => {
+      this._ui.closeDetail();
+      this._map.closeAllPopups();
+    });
+    this._bus.on('ui:togglestats',    () => this._ui.toggleStats());
+    this._bus.on('ui:toggletimeline', () => this._ui.toggleTimeline());
+
+    this._bus.on('ui:togglecluster',  () => {
+      const enabled = this._map.toggleCluster();
+      document.getElementById('btn-cluster').classList.toggle('active', !enabled);
+      this._ui.showToast(enabled ? '🗂 Clustering on' : '🗂 Clustering off');
+    });
+
+    this._bus.on('ui:cyclelayer', () => this._map.cycleLayer());
+
+    this._bus.on('ui:fitall', () => {
+      this._map.fitAll(this._currentDinos);
+      this._ui.showToast('🎯 Showing all visible markers');
+    });
+
+    this._bus.on('ui:cardclick', ({ id }) => this.selectDino(id));
+
+    this._bus.on('ui:flyto', ({ lat, lng, id }) => {
+      this._map.flyTo(lat, lng, 7);
+      this._map.highlightMarker(id);
+    });
+  }
+
+  /* ── filter & render pipeline ───────────────────────────── */
+  _applyFilter(state) {
+    const { era, diet, query } = this._filter.getState
+      ? { ...this._filter.getState(), ...state }
+      : state;
+
+    const results = this._data.query({ era, diet, search: query });
+    const sorted  = this._filter.sortAlphabetically(results);
+
+    this._currentDinos = sorted;
+
+    this._map.renderMarkers(sorted);
+    this._ui.renderList(sorted, this._data.count());
+  }
+
+  /* ── public API ─────────────────────────────────────────── */
+  selectDino(id) {
+    const dino = this._data.getById(id);
+    if (!dino) return;
+
+    this._ui.openDetail(dino);
+    this._map.flyTo(dino.lat, dino.lng, 6);
+    this._map.highlightMarker(id);
+
+    // scroll card into view in sidebar
+    const card = document.querySelector(`.dino-card[data-id="${id}"]`);
+    if (card) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  /* ── helpers ─────────────────────────────────────────────── */
+  _sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+}
+
+
+/* ============================================================
+   BOOTSTRAP
+   ============================================================ */
+window.addEventListener('DOMContentLoaded', async () => {
+  const manager = new ManagerAgent();
+  window.__dinoManager = manager;   // needed by popup inline onclick
+  await manager.init();
+});
+</script>
+</body>
+</html>
