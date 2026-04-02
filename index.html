@@ -914,6 +914,27 @@
       font-family: var(--sans);
     }
 
+    .leaflet-tooltip.mapdash-label {
+      background: transparent;
+      border: none;
+      box-shadow: none;
+      padding: 0;
+      pointer-events: none;
+    }
+
+    .leaflet-tooltip.mapdash-label::before {
+      display: none;
+    }
+
+    .mapdash-selected-marker {
+      filter: drop-shadow(0 0 0 4px rgba(255, 209, 126, 0.46)) drop-shadow(0 0 18px rgba(255, 209, 126, 0.38));
+      transform: translateY(-1px);
+    }
+
+    .attr-table tr.selected-row td {
+      background: rgba(255, 209, 126, 0.08);
+    }
+
     @media (max-width: 1080px) {
       .app {
         grid-template-columns: 350px 1fr;
@@ -1122,6 +1143,10 @@
             <button class="btn" id="importXlsBtn"><i class="fa-solid fa-file-excel"></i> XLS/XLSX</button>
           </div>
           <div class="row">
+            <button class="btn" id="importServiceBtn"><i class="fa-solid fa-cloud-arrow-down"></i> Online Service</button>
+            <button class="btn" id="importGeoUrlBtn"><i class="fa-solid fa-link"></i> GeoJSON URL</button>
+          </div>
+          <div class="row">
             <button class="btn" id="filterBtn"><i class="fa-solid fa-filter"></i> Attribute Filter</button>
             <button class="btn" id="heatBtn"><i class="fa-solid fa-fire"></i> Heatmap</button>
           </div>
@@ -1133,6 +1158,34 @@
           <input id="csvInput" type="file" accept=".csv" hidden />
           <input id="shpInput" type="file" accept=".zip,.shp" hidden />
           <input id="xlsInput" type="file" accept=".xls,.xlsx" hidden />
+        </section>
+
+        <section class="block">
+          <h3>Selection and Query</h3>
+          <div class="row">
+            <button class="btn" id="selectAttributeBtn"><i class="fa-solid fa-filter"></i> Select Attribute</button>
+            <button class="btn" id="selectLocationBtn"><i class="fa-solid fa-crosshairs"></i> Select Location</button>
+          </div>
+          <div class="row">
+            <button class="btn" id="selectInteractiveBtn"><i class="fa-solid fa-arrow-pointer"></i> Click Select</button>
+            <button class="btn" id="selectBoxBtn"><i class="fa-regular fa-square"></i> Box Select</button>
+          </div>
+          <div class="row">
+            <button class="btn" id="selectPolygonBtn"><i class="fa-solid fa-draw-polygon"></i> Polygon Select</button>
+            <button class="btn" id="selectRadiusBtn"><i class="fa-solid fa-bullseye"></i> Radius Select</button>
+          </div>
+          <div class="row">
+            <button class="btn" id="clearSelectionBtn"><i class="fa-solid fa-eraser"></i> Clear Selection</button>
+            <button class="btn" id="invertSelectionBtn"><i class="fa-solid fa-not-equal"></i> Invert</button>
+          </div>
+          <div class="row">
+            <button class="btn" id="zoomSelectionBtn"><i class="fa-solid fa-expand"></i> Zoom Selected</button>
+            <button class="btn" id="selectionTableBtn"><i class="fa-solid fa-table-list"></i> Selected Table</button>
+          </div>
+          <div class="row">
+            <button class="btn" id="selectionStatsBtn"><i class="fa-solid fa-chart-column"></i> Summary</button>
+            <button class="btn brand" id="copySelectionBtn"><i class="fa-solid fa-copy"></i> Copy Selected</button>
+          </div>
         </section>
 
         <section class="block">
@@ -1219,7 +1272,7 @@
         <section class="block" id="layerManagerBlock">
           <h3>Layer Manager <span id="layerCount">0</span></h3>
           <div class="row">
-            <button class="btn" id="newGroupBtn"><i class="fa-solid fa-folder-plus"></i> Group Folder</button>
+            <button class="btn" id="newGroupBtn"><i class="fa-solid fa-folder-plus"></i> New Layer</button>
             <button class="btn" id="clearHeatBtn"><i class="fa-solid fa-temperature-empty"></i> Clear Heat</button>
           </div>
           <div class="row">
@@ -1227,13 +1280,13 @@
             <button class="btn" id="layerFieldsBtn"><i class="fa-solid fa-sliders"></i> Schema Tools</button>
           </div>
           <div class="target-grid" id="featureTargetBlock">
-            <label>Point Target
+            <label>Point Layer
               <select id="pointTarget" class="field"></select>
             </label>
-            <label>Line Target
+            <label>Line Layer
               <select id="lineTarget" class="field"></select>
             </label>
-            <label>Polygon Target
+            <label>Polygon Layer
               <select id="polygonTarget" class="field"></select>
             </label>
           </div>
@@ -1247,6 +1300,8 @@
       <span class="desktop-only">|</span>
       <span id="zoom">z: 2</span>
       <span class="desktop-only">|</span>
+      <span id="selected">selected: 0</span>
+      <span class="desktop-only">|</span>
       <span id="features">features: 0</span>
     </div>
   </div>
@@ -1258,7 +1313,7 @@
         <div class="layer-drawer-sub" id="layerDrawerCoords">WGS84 lon, lat: 0.000000, 0.000000</div>
       </div>
       <div class="layer-drawer-actions">
-        <button class="icon-btn" id="layerDrawerGroupBtn" title="Create group"><i class="fa-solid fa-folder-plus"></i></button>
+        <button class="icon-btn" id="layerDrawerGroupBtn" title="Create layer"><i class="fa-solid fa-folder-plus"></i></button>
         <button class="icon-btn" id="layerDrawerCloseBtn" title="Close layer manager"><i class="fa-solid fa-xmark"></i></button>
       </div>
     </div>
@@ -1295,13 +1350,15 @@
     const state = {
       map: null,
       drawn: null,
+      serverLayers: {},
       clusterLayer: null,
       clusterMode: false,
       basemaps: {},
       currentBasemap: null,
       overlayLayers: [],
       layerMeta: {},
-      groups: ["Default"],
+      groups: [],
+      datasetMeta: {},
       history: [],
       redo: [],
       projectName: "untitled",
@@ -1320,7 +1377,9 @@
       pendingImageUrl: null,
       toolState: null,
       toolPoints: [],
-      featureSeq: 0
+      featureSeq: 0,
+      selectedIds: [],
+      selectionTool: null
     };
 
     const ui = {
@@ -1348,6 +1407,7 @@
       layerCount: document.getElementById("layerCount"),
       coord: document.getElementById("coord"),
       zoom: document.getElementById("zoom"),
+      selected: document.getElementById("selected"),
       features: document.getElementById("features"),
       toast: document.getElementById("toast"),
       modal: document.getElementById("modal"),
@@ -1413,21 +1473,227 @@
     }
 
     function findLayerById(id) {
-      return state.drawn.getLayers().find((layer) => layerKey(layer) === id) || null;
+      return featureLayers().find((layer) => layerKey(layer) === id) || null;
+    }
+
+    function layerGroupName(layer) {
+      const props = ensureLayerProperties(layer);
+      return layer._mapdashGroup || props.group || null;
+    }
+
+    function isServerBackedSource(source) {
+      return !!(source && source.type === "arcgis-rest" && source.mode === "live");
+    }
+
+    function isServerBackedGroup(groupName) {
+      const meta = getDatasetMeta(groupName);
+      return !!(meta && isServerBackedSource(meta.source));
+    }
+
+    function editableFeatureLayers() {
+      return state.drawn ? state.drawn.getLayers().filter((layer) => isFeatureLayer(layer)) : [];
+    }
+
+    function serverFeatureLayers() {
+      return Object.values(state.serverLayers || {}).flatMap((entry) => entry.layerGroup.getLayers().filter((layer) => isFeatureLayer(layer)));
+    }
+
+    function derivedLayerMeta(layer) {
+      const group = layerGroupName(layer);
+      if (!group) return null;
+      const datasetMeta = getDatasetMeta(group) || {};
+      const props = ensureLayerProperties(layer);
+      const displayField = datasetMeta.serviceInfo && datasetMeta.serviceInfo.displayField ? datasetMeta.serviceInfo.displayField : "";
+      return {
+        name: safeName(props.name || (displayField ? props[displayField] : "") || datasetMeta.serviceInfo && datasetMeta.serviceInfo.name || layerTypeName(layer), layerTypeName(layer)),
+        visible: datasetMeta.visible !== false,
+        opacity: Number.isFinite(datasetMeta.opacity) ? datasetMeta.opacity : 1,
+        group,
+        kind: props.kind || layerTypeName(layer),
+        addedAt: datasetMeta.addedAt || new Date().toISOString(),
+        style: cloneJson(datasetMeta.style || readLayerStyle(layer)),
+        readOnly: isServerBackedSource(datasetMeta.source),
+        source: cloneJson(datasetMeta.source || null)
+      };
     }
 
     function getLayerMeta(layer) {
-      return state.layerMeta[layerKey(layer)] || null;
+      return state.layerMeta[layerKey(layer)] || derivedLayerMeta(layer);
     }
 
     function isSystemField(field) {
       return String(field || "").startsWith(INTERNAL_FIELD_PREFIX);
     }
 
-    function ensureGroupExists(name) {
-      const group = safeName(name, "Default");
+    function featureLayers() {
+      return editableFeatureLayers().concat(serverFeatureLayers());
+    }
+
+    function selectionIdGroup(id) {
+      if (!id) return null;
+      if (state.layerMeta[id] && state.layerMeta[id].group) return state.layerMeta[id].group;
+      const prefix = String(id).split("::")[0];
+      return state.groups.includes(prefix) ? prefix : null;
+    }
+
+    function selectedIdSet() {
+      return new Set(state.selectedIds || []);
+    }
+
+    function selectionCount() {
+      return selectedIdSet().size;
+    }
+
+    function isLayerSelected(layer) {
+      const id = layerKey(layer);
+      return !!id && selectedIdSet().has(id);
+    }
+
+    function selectedFeatureLayers() {
+      const ids = selectedIdSet();
+      return featureLayers().filter((layer) => ids.has(layerKey(layer)));
+    }
+
+    function setSelectionIds(nextIds, options = {}) {
+      state.selectedIds = Array.from(new Set((nextIds || []).filter(Boolean)));
+      refreshSelectionStyles();
+      updateStatus();
+      if (!options.silent && options.message) toast(options.message, options.ms || 2200);
+    }
+
+    function clearSelection(options = {}) {
+      if (!selectionCount()) {
+        if (!options.silent) toast("Selection cleared");
+        return;
+      }
+      setSelectionIds([], {
+        silent: options.silent,
+        message: options.message || "Selection cleared",
+        ms: options.ms
+      });
+    }
+
+    function clearSelectionForGroup(groupName, options = {}) {
+      setSelectionIds(
+        (state.selectedIds || []).filter((id) => selectionIdGroup(id) !== groupName),
+        {
+          silent: options.silent,
+          message: options.message
+        }
+      );
+    }
+
+    function applySelectionOperation(matches, method = "new", options = {}) {
+      const current = selectedIdSet();
+      const matchIds = new Set((matches || []).map((layer) => typeof layer === "string" ? layer : layerKey(layer)).filter(Boolean));
+      const scopeIds = new Set((options.scopeLayers || featureLayers()).map((layer) => layerKey(layer)).filter(Boolean));
+      let next = new Set(current);
+
+      if (method === "new") next = new Set(matchIds);
+      if (method === "add") matchIds.forEach((id) => next.add(id));
+      if (method === "remove") matchIds.forEach((id) => next.delete(id));
+      if (method === "subset") next = new Set(Array.from(current).filter((id) => matchIds.has(id)));
+      if (method === "toggle") {
+        matchIds.forEach((id) => {
+          if (next.has(id)) next.delete(id);
+          else next.add(id);
+        });
+      }
+      if (method === "invert") {
+        next = new Set(current);
+        scopeIds.forEach((id) => {
+          if (next.has(id)) next.delete(id);
+          else next.add(id);
+        });
+      }
+
+      setSelectionIds(Array.from(next), {
+        silent: options.silent,
+        message: options.message
+      });
+      return Array.from(next);
+    }
+
+    function invertSelection(scope = "all") {
+      const scopeLayers = layersInScope(scope);
+      if (!scopeLayers.length) {
+        toast("No features in that scope", 2200);
+        return;
+      }
+      applySelectionOperation([], "invert", {
+        scopeLayers,
+        message: `Selection inverted (${scopeLayers.length} in scope)`
+      });
+    }
+
+    function defaultGroupNameForBucket(bucket) {
+      if (bucket === "point") return "Points";
+      if (bucket === "line") return "Lines";
+      if (bucket === "polygon") return "Polygons";
+      return "Default";
+    }
+
+    function datasetGeometryLabel(bucket) {
+      if (bucket === "point") return "Point Layer";
+      if (bucket === "line") return "Line Layer";
+      if (bucket === "polygon") return "Polygon Layer";
+      return "Layer";
+    }
+
+    function bucketFromArcGisGeometryType(type) {
+      const normalized = String(type || "").toLowerCase();
+      if (normalized.includes("point")) return "point";
+      if (normalized.includes("polyline") || normalized.includes("line")) return "line";
+      if (normalized.includes("polygon") || normalized.includes("envelope")) return "polygon";
+      return null;
+    }
+
+    function defaultStyleForBucket(bucket) {
+      if (bucket === "point") return { markerShape: "pin", color: "#44d2a8", strokeColor: "#072018", size: 28, opacity: 1 };
+      if (bucket === "line") return { color: "#44d2a8", weight: 3, opacity: 0.9, dashArray: "" };
+      if (bucket === "polygon") return { color: "#44d2a8", fillColor: "#44d2a8", weight: 2, opacity: 1, fillOpacity: 0.22, dashArray: "" };
+      return { opacity: 1 };
+    }
+
+    function getDatasetMeta(name) {
+      return state.datasetMeta[name] || null;
+    }
+
+    function ensureGroupExists(name, bucket = null, options = {}) {
+      const group = safeName(name, bucket ? defaultGroupNameForBucket(bucket) : "Default");
       if (!state.groups.includes(group)) state.groups.push(group);
+      const existing = state.datasetMeta[group] || {};
+      state.datasetMeta[group] = {
+        ...existing,
+        geometryType: bucket || existing.geometryType || null,
+        visible: existing.visible !== false,
+        opacity: Number.isFinite(existing.opacity) ? existing.opacity : 1,
+        addedAt: existing.addedAt || new Date().toISOString(),
+        style: cloneJson(existing.style || options.style || (bucket ? defaultStyleForBucket(bucket) : null))
+      };
       return group;
+    }
+
+    function uniqueGroupName(baseName) {
+      const base = safeName(baseName, "Layer");
+      if (!state.groups.includes(base)) return base;
+      let index = 2;
+      while (state.groups.includes(`${base} ${index}`)) index += 1;
+      return `${base} ${index}`;
+    }
+
+    function inferGroupGeometryType(groupName) {
+      const meta = getDatasetMeta(groupName);
+      if (meta && meta.geometryType) return meta.geometryType;
+      const sample = featureLayers().find((layer) => {
+        const layerMeta = getLayerMeta(layer);
+        return layerMeta && layerMeta.group === groupName;
+      });
+      return sample ? layerBucket(sample) : null;
+    }
+
+    function layersInGroup(groupName) {
+      return layersInScope(groupName);
     }
 
     function publicPropertyEntries(layer) {
@@ -1442,12 +1708,13 @@
       return Array.from(keys).sort((a, b) => a.localeCompare(b));
     }
 
-    function layersInScope(scope = "all") {
-      return state.drawn.getLayers().filter((layer) => {
+    function layersInScope(scope = "all", options = {}) {
+      const sourceLayers = options.editableOnly ? editableFeatureLayers() : featureLayers();
+      return sourceLayers.filter((layer) => {
         if (!isFeatureLayer(layer)) return false;
         if (scope === "all") return true;
-        const meta = getLayerMeta(layer);
-        return meta && meta.group === scope;
+        if (scope === "selected") return isLayerSelected(layer);
+        return layerGroupName(layer) === scope;
       });
     }
 
@@ -1486,6 +1753,351 @@
         if (lower[candidate]) return lower[candidate];
       }
       return null;
+    }
+
+    function appendQueryParams(url, params) {
+      const next = new URL(url, location.href);
+      Object.entries(params || {}).forEach(([key, value]) => {
+        if (value == null || value === "") return;
+        next.searchParams.set(key, String(value));
+      });
+      return next.toString();
+    }
+
+    async function fetchJson(url, options = {}) {
+      const res = await fetch(url, {
+        headers: { Accept: "application/json" },
+        ...options
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    }
+
+    function serviceUrlPath(url) {
+      try {
+        return new URL(url, location.href).pathname.replace(/\/+$/, "");
+      } catch (_) {
+        return String(url || "").trim().replace(/[?#].*$/, "").replace(/\/+$/, "");
+      }
+    }
+
+    function appendUrlPath(url, segment) {
+      const next = new URL(url, location.href);
+      next.pathname = `${next.pathname.replace(/\/+$/, "")}/${String(segment).replace(/^\/+/, "")}`;
+      return next.toString();
+    }
+
+    function isArcGisLayerUrl(url) {
+      return /\/(?:FeatureServer|MapServer)\/\d+$/i.test(serviceUrlPath(url));
+    }
+
+    function isArcGisServiceRootUrl(url) {
+      return /\/(?:FeatureServer|MapServer)$/i.test(serviceUrlPath(url));
+    }
+
+    function inferOnlineDatasetName(url, fallback = "Online Layer") {
+      const path = serviceUrlPath(url);
+      const tail = path.split("/").filter(Boolean).pop();
+      if (tail && !/^\d+$/.test(tail) && !/^(mapserver|featureserver)$/i.test(tail)) return safeName(decodeURIComponent(tail), fallback);
+      const parts = path.split("/").filter(Boolean);
+      if (parts.length >= 2) return safeName(decodeURIComponent(parts[parts.length - 2]), fallback);
+      return fallback;
+    }
+
+    function mergeFeatureCollections(collections) {
+      return {
+        type: "FeatureCollection",
+        features: collections.flatMap((collection) => Array.isArray(collection && collection.features) ? collection.features : [])
+      };
+    }
+
+    function clearServerLayers() {
+      clearTimeout(scheduleServerLayerRefresh._t);
+      Object.keys(state.serverLayers || {}).forEach((groupName) => removeServerLayer(groupName));
+      state.serverLayers = {};
+    }
+
+    function removeServerLayer(groupName) {
+      const entry = state.serverLayers[groupName];
+      if (!entry) return;
+      if (state.map && entry.layerGroup && state.map.hasLayer(entry.layerGroup)) state.map.removeLayer(entry.layerGroup);
+      entry.layerGroup.clearLayers();
+      delete state.serverLayers[groupName];
+    }
+
+    function setServerLayerVisibility(groupName, visible) {
+      const entry = state.serverLayers[groupName];
+      if (!entry || !state.map) return;
+      if (visible) {
+        if (!state.map.hasLayer(entry.layerGroup)) entry.layerGroup.addTo(state.map);
+        scheduleServerLayerRefresh();
+      } else if (state.map.hasLayer(entry.layerGroup)) {
+        state.map.removeLayer(entry.layerGroup);
+      }
+    }
+
+    function arcGisEnvelopeForBounds(bounds) {
+      return `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`;
+    }
+
+    function arcGisEnvelopeToBounds(extent) {
+      if (!extent) return null;
+      const xmin = Number(extent.xmin);
+      const ymin = Number(extent.ymin);
+      const xmax = Number(extent.xmax);
+      const ymax = Number(extent.ymax);
+      if (![xmin, ymin, xmax, ymax].every(Number.isFinite)) return null;
+      return L.latLngBounds([ymin, xmin], [ymax, xmax]);
+    }
+
+    function liveLayerViewLimit(groupName) {
+      const meta = getDatasetMeta(groupName);
+      const source = meta && meta.source ? meta.source : {};
+      const fetchMode = source.fetchMode || "auto";
+      if (fetchMode === "all-in-view") return Infinity;
+      const raw = Number(source.viewLimit);
+      return Number.isFinite(raw) && raw > 0 ? raw : 4000;
+    }
+
+    function liveLayerFetchMode(groupName) {
+      const meta = getDatasetMeta(groupName);
+      return meta && meta.source && meta.source.fetchMode ? meta.source.fetchMode : "auto";
+    }
+
+    function liveLayerFetchModeLabel(mode) {
+      if (mode === "all-in-view") return "all in view";
+      if (mode === "cap") return "capped";
+      return "auto";
+    }
+
+    function selectionCursorForTool(type) {
+      if (type === "box") return "cell";
+      if (type === "click") return "copy";
+      return "crosshair";
+    }
+
+    function selectionMethodFromPointerEvent(event, fallback = "new") {
+      const pointer = event && event.originalEvent ? event.originalEvent : event;
+      if (pointer && pointer.altKey) return "remove";
+      if (pointer && pointer.shiftKey) return "add";
+      if (pointer && (pointer.ctrlKey || pointer.metaKey)) return "toggle";
+      return fallback;
+    }
+
+    function stopSelectionPointerEvent(event) {
+      if (event && event.originalEvent) {
+        event.originalEvent.preventDefault();
+        event.originalEvent.stopPropagation();
+      }
+      if (event && typeof L !== "undefined" && L.DomEvent && typeof L.DomEvent.stop === "function") {
+        try {
+          L.DomEvent.stop(event);
+        } catch (_) {
+        }
+      }
+    }
+
+    function handleLayerSelectionClick(layer, event) {
+      const tool = state.selectionTool;
+      if (!tool) return false;
+
+      if (tool.type === "click") {
+        stopSelectionPointerEvent(event);
+        if (tool.scope !== "all" && layerGroupName(layer) !== tool.scope) {
+          toast(`Click select target: ${tool.scope}`, 1200);
+          return true;
+        }
+        applySelectionOperation([layer], selectionMethodFromPointerEvent(event, tool.method || "new"), { silent: true });
+        toast(`Selected: ${selectionCount()}`, 1200);
+        return true;
+      }
+
+      if (tool.type === "polygon") {
+        stopSelectionPointerEvent(event);
+        polygonSelectionMapClick(event);
+        return true;
+      }
+
+      if (tool.type === "radius") {
+        stopSelectionPointerEvent(event);
+        radiusSelectionMapClick(event);
+        return true;
+      }
+
+      if (tool.type === "box") {
+        stopSelectionPointerEvent(event);
+        return true;
+      }
+
+      return false;
+    }
+
+    function handleLayerSelectionPointerDown(event) {
+      const tool = state.selectionTool;
+      if (!tool || tool.type !== "box") return false;
+      boxSelectionMouseDown(event);
+      stopSelectionPointerEvent(event);
+      return true;
+    }
+
+    function handleLayerSelectionPointerUp(event) {
+      const tool = state.selectionTool;
+      if (!tool || tool.type !== "box" || !tool.start) return false;
+      boxSelectionMouseUp(event);
+      stopSelectionPointerEvent(event);
+      return true;
+    }
+
+    function bindFeaturePopup(layer) {
+      if (!layer || layer._mapdashPopupBound) return;
+      layer._mapdashPopupBound = true;
+      layer.on("click", (event) => {
+        if (handleLayerSelectionClick(layer, event)) return;
+        const meta = getLayerMeta(layer) || { name: "Layer", kind: layerTypeName(layer), group: "Default" };
+        const attrs = publicPropertyEntries(layer)
+          .slice(0, 4)
+          .map(([field, value]) => `<div><b>${escapeHtml(field)}</b>: ${escapeHtml(value)}</div>`)
+          .join("");
+        const modeText = meta.readOnly ? "live" : "editable";
+        const popupHtml = `
+          <b>${escapeHtml(meta.name)}</b><br>
+          <small>${escapeHtml(meta.kind)} | layer: ${escapeHtml(meta.group || "Unassigned")} | ${modeText}</small>
+          ${attrs ? `<div style="margin-top:8px">${attrs}</div>` : ""}
+        `;
+        layer.bindPopup(popupHtml).openPopup();
+      });
+    }
+
+    function prepareServerFeatureLayer(layer, groupName) {
+      const props = ensureLayerProperties(layer);
+      const datasetMeta = getDatasetMeta(groupName) || {};
+      const displayField = datasetMeta.serviceInfo && datasetMeta.serviceInfo.displayField ? datasetMeta.serviceInfo.displayField : "";
+      layer._mapdashGroup = groupName;
+      layer._mapdashReadOnly = true;
+      props.group = groupName;
+      props.kind = props.kind || layerTypeName(layer);
+      if (!props.name && displayField && props[displayField] != null) props.name = String(props[displayField]);
+      if (!props[INTERNAL_FIELD_ID]) {
+        const objectId = props.OBJECTID || props.objectid || props.ObjectId || props.objectId;
+        if (objectId != null) props[INTERNAL_FIELD_ID] = `${groupName}::${objectId}`;
+      }
+      bindFeaturePopup(layer);
+      if (datasetMeta.style) applyLayerSymbology(layer, datasetMeta.style);
+      if (datasetMeta.label) applyLayerLabeling(layer, datasetMeta.label);
+    }
+
+    async function createServerLayer(groupName, options = {}) {
+      const meta = getDatasetMeta(groupName);
+      if (!meta || !isServerBackedSource(meta.source)) return null;
+      if (state.serverLayers[groupName]) return state.serverLayers[groupName];
+
+      const entry = {
+        groupName,
+        layerGroup: L.featureGroup(),
+        requestId: 0
+      };
+      state.serverLayers[groupName] = entry;
+      if (state.map && meta.visible !== false) entry.layerGroup.addTo(state.map);
+      if (meta.visible !== false) await refreshServerLayer(groupName, { force: true, refreshUi: false, throwOnError: options.throwOnError === true });
+      return entry;
+    }
+
+    async function syncServerLayers() {
+      const liveGroups = state.groups.filter((groupName) => isServerBackedGroup(groupName));
+      Object.keys(state.serverLayers || {}).forEach((groupName) => {
+        if (!liveGroups.includes(groupName)) removeServerLayer(groupName);
+      });
+      for (const groupName of liveGroups) {
+        await createServerLayer(groupName);
+      }
+      liveGroups.forEach((groupName) => {
+        const meta = getDatasetMeta(groupName);
+        setServerLayerVisibility(groupName, !meta || meta.visible !== false);
+      });
+    }
+
+    function scheduleServerLayerRefresh() {
+      if (!state.groups.some((groupName) => isServerBackedGroup(groupName))) return;
+      clearTimeout(scheduleServerLayerRefresh._t);
+      scheduleServerLayerRefresh._t = setTimeout(() => {
+        refreshAllServerLayers();
+      }, 120);
+    }
+
+    async function refreshAllServerLayers() {
+      const liveGroups = state.groups.filter((groupName) => isServerBackedGroup(groupName));
+      if (!liveGroups.length) return;
+      for (const groupName of liveGroups) {
+        await refreshServerLayer(groupName, { refreshUi: false });
+      }
+      refreshLayers();
+    }
+
+    async function refreshServerLayer(groupName, options = {}) {
+      const meta = getDatasetMeta(groupName);
+      const entry = state.serverLayers[groupName];
+      if (!meta || !entry || !isServerBackedSource(meta.source) || !state.map) return;
+      if (!options.force && meta.visible === false) return;
+
+      const requestId = ++entry.requestId;
+      const bounds = state.map.getBounds();
+      const geometry = arcGisEnvelopeForBounds(bounds);
+      const where = meta.source.where || "1=1";
+      const maxFeatures = liveLayerViewLimit(groupName);
+      const fetchMode = liveLayerFetchMode(groupName);
+
+      try {
+        const [featureCollection, visibleCount] = await Promise.all([
+          fetchArcGisLayerGeoJson(meta.source.url, {
+            where,
+            maxFeatures,
+            geometry,
+            geometryType: "esriGeometryEnvelope",
+            inSR: "4326",
+            spatialRel: "esriSpatialRelIntersects"
+          }),
+          fetchArcGisLayerCount(meta.source.url, {
+            where,
+            geometry,
+            geometryType: "esriGeometryEnvelope",
+            inSR: "4326",
+            spatialRel: "esriSpatialRelIntersects"
+          }).catch(() => null)
+        ]);
+
+        if (requestId !== entry.requestId) return;
+
+        entry.layerGroup.clearLayers();
+        if (featureCollection && Array.isArray(featureCollection.features) && featureCollection.features.length) {
+          const geoLayer = L.geoJSON(featureCollection);
+          geoLayer.eachLayer((layer) => {
+            prepareServerFeatureLayer(layer, groupName);
+            entry.layerGroup.addLayer(layer);
+          });
+        }
+
+        if (meta.visible !== false && !state.map.hasLayer(entry.layerGroup)) entry.layerGroup.addTo(state.map);
+
+        const loadedCount = entry.layerGroup.getLayers().length;
+        state.datasetMeta[groupName].liveStats = {
+          ...(state.datasetMeta[groupName].liveStats || {}),
+          loadedCount,
+          visibleCount: Number.isFinite(visibleCount) ? visibleCount : loadedCount,
+          truncated: Number.isFinite(visibleCount) ? visibleCount > loadedCount : loadedCount >= maxFeatures,
+          fetchMode,
+          lastLoadedAt: new Date().toISOString()
+        };
+
+        if (options.refreshUi !== false) refreshLayers();
+      } catch (err) {
+        console.error(err);
+        state.datasetMeta[groupName].liveStats = {
+          ...(state.datasetMeta[groupName].liveStats || {}),
+          error: err.message || "Live layer refresh failed"
+        };
+        if (options.throwOnError) throw err;
+        if (options.refreshUi !== false) refreshLayers();
+      }
     }
 
     function setPanel(open) {
@@ -1627,6 +2239,10 @@
           <b>/</b> Focus search input<br>
           <b>Enter</b> Run place search<br>
           <b>Esc</b> Close menus/tools<br>
+          <b>Shift + click</b> Add to interactive selection<br>
+          <b>Ctrl/Cmd + click</b> Toggle interactive selection<br>
+          <b>Alt + click</b> Remove from interactive selection<br>
+          <b>Double-click</b> Finish polygon selection<br>
           <b>Cmd/Ctrl + Z</b> Undo<br>
           <b>Cmd/Ctrl + Y</b> Redo
         </div>`,
@@ -1830,13 +2446,18 @@
     }
 
     function ensureFeatureTargetDefaults() {
-      ["Points", "Lines", "Polygons"].forEach((g) => {
-        if (!state.groups.includes(g)) state.groups.push(g);
+      ["point", "line", "polygon"].forEach((key) => {
+        const matching = state.groups.filter((group) => inferGroupGeometryType(group) === key);
+        if (!matching.length) {
+          ensureGroupExists(defaultGroupNameForBucket(key), key, { style: defaultStyleForBucket(key) });
+        }
       });
+
       ["point", "line", "polygon"].forEach((key) => {
         const val = state.featureTargets[key];
-        if (!val || !state.groups.includes(val)) {
-          state.featureTargets[key] = key === "point" ? "Points" : key === "line" ? "Lines" : "Polygons";
+        const matching = state.groups.filter((group) => inferGroupGeometryType(group) === key);
+        if (!val || !matching.includes(val)) {
+          state.featureTargets[key] = matching[0] || defaultGroupNameForBucket(key);
         }
       });
     }
@@ -1859,7 +2480,7 @@
     function targetGroupForLayer(layer) {
       const bucket = layerBucket(layer);
       if (!bucket) return "Default";
-      return state.featureTargets[bucket] || "Default";
+      return state.featureTargets[bucket] || defaultGroupNameForBucket(bucket);
     }
 
     function refreshTargetOptions() {
@@ -1872,9 +2493,10 @@
       selects.forEach(({ el, key }) => {
         if (!el) return;
         const options = state.groups
+          .filter((group) => inferGroupGeometryType(group) === key)
           .map((g) => `<option value="${g}" ${g === state.featureTargets[key] ? "selected" : ""}>${g}</option>`)
           .join("");
-        el.innerHTML = options;
+        el.innerHTML = options || `<option value="${defaultGroupNameForBucket(key)}">${defaultGroupNameForBucket(key)}</option>`;
       });
     }
 
@@ -1917,6 +2539,7 @@
     }
 
     function readLayerStyle(layer) {
+      if (layer && layer._mapdashBaseStyle) return cloneJson(layer._mapdashBaseStyle);
       const base = defaultStyleForLayer(layer);
       if (layer instanceof L.Marker) {
         const icon = layer.options && layer.options.icon && layer.options.icon.options ? layer.options.icon.options : null;
@@ -1942,6 +2565,74 @@
       if (Number.isFinite(layer.options.radius)) base.radius = layer.options.radius;
       if (layer.options.dashArray != null) base.dashArray = layer.options.dashArray;
       return base;
+    }
+
+    function vectorStyleOptions(kind, style) {
+      const base = {
+        color: style.color,
+        fillColor: style.fillColor || style.color,
+        weight: style.weight,
+        opacity: style.opacity,
+        fillOpacity: style.fillOpacity,
+        dashArray: style.dashArray || null
+      };
+      if (kind === "circle-marker" && Number.isFinite(style.radius)) base.radius = style.radius;
+      return base;
+    }
+
+    function selectedVectorStyleOptions(kind, style) {
+      return {
+        ...vectorStyleOptions(kind, style),
+        color: "#ffd17e",
+        weight: Math.max(3, Number(style.weight) || 2) + 1,
+        opacity: 1,
+        fillOpacity: kind === "line" ? style.fillOpacity : Math.min(0.85, Math.max(Number(style.fillOpacity) || 0.22, 0.32))
+      };
+    }
+
+    function applyMarkerSelectionState(layer, selected) {
+      if (layer.setZIndexOffset) layer.setZIndexOffset(selected ? 1000 : 0);
+      if (layer._icon) layer._icon.classList.toggle("mapdash-selected-marker", selected);
+    }
+
+    function syncLayerSelectionState(layer) {
+      if (!layer || !isFeatureLayer(layer)) return;
+      const kind = styleKindForLayer(layer);
+      const baseStyle = readLayerStyle(layer);
+      const selected = isLayerSelected(layer);
+
+      if (kind === "marker") {
+        applyMarkerSelectionState(layer, selected);
+        return;
+      }
+
+      if (kind === "circle-marker") {
+        if (Number.isFinite(baseStyle.radius) && layer.setRadius) layer.setRadius(selected ? baseStyle.radius + 2 : baseStyle.radius);
+        if (layer.setStyle) layer.setStyle(selected ? selectedVectorStyleOptions(kind, baseStyle) : vectorStyleOptions(kind, baseStyle));
+        return;
+      }
+
+      if (["line", "polygon", "circle"].includes(kind) && layer.setStyle) {
+        layer.setStyle(selected ? selectedVectorStyleOptions(kind, baseStyle) : vectorStyleOptions(kind, baseStyle));
+      }
+    }
+
+    function refreshSelectionStyles() {
+      featureLayers().forEach((layer) => syncLayerSelectionState(layer));
+    }
+
+    function ensureSelectableLayer(layer) {
+      if (!layer || layer._mapdashSelectableReady) return;
+      layer._mapdashSelectableReady = true;
+      layer.on("add", () => {
+        syncLayerSelectionState(layer);
+      });
+      layer.on("mousedown", (event) => {
+        handleLayerSelectionPointerDown(event);
+      });
+      layer.on("mouseup", (event) => {
+        handleLayerSelectionPointerUp(event);
+      });
     }
 
     function buildMarkerIcon(style) {
@@ -1977,13 +2668,16 @@
     }
 
     function applyLayerSymbology(layer, styleInput, options = {}) {
-      const meta = getLayerMeta(layer);
+      const groupName = layerGroupName(layer);
+      const datasetMeta = groupName ? getDatasetMeta(groupName) : null;
+      const meta = state.layerMeta[layerKey(layer)] || (datasetMeta && isServerBackedGroup(groupName) ? datasetMeta : null);
       const style = {
         ...readLayerStyle(layer),
         ...(meta && meta.style ? meta.style : {}),
         ...(styleInput || {})
       };
       const kind = styleKindForLayer(layer);
+      layer._mapdashBaseStyle = cloneJson(style);
 
       if (kind === "marker") {
         if (style.markerShape === "custom" && style.customHtml) {
@@ -2000,27 +2694,9 @@
         if (layer.setOpacity) layer.setOpacity(style.opacity ?? 1);
       } else if (kind === "circle-marker") {
         if (Number.isFinite(style.radius) && layer.setRadius) layer.setRadius(style.radius);
-        if (layer.setStyle) {
-          layer.setStyle({
-            color: style.color,
-            fillColor: style.fillColor || style.color,
-            weight: style.weight,
-            opacity: style.opacity,
-            fillOpacity: style.fillOpacity,
-            dashArray: style.dashArray || null
-          });
-        }
+        if (layer.setStyle) layer.setStyle(vectorStyleOptions(kind, style));
       } else if (kind === "line" || kind === "polygon" || kind === "circle") {
-        if (layer.setStyle) {
-          layer.setStyle({
-            color: style.color,
-            fillColor: style.fillColor || style.color,
-            weight: style.weight,
-            opacity: style.opacity,
-            fillOpacity: style.fillOpacity,
-            dashArray: style.dashArray || null
-          });
-        }
+        if (layer.setStyle) layer.setStyle(vectorStyleOptions(kind, style));
       } else if (kind === "image" && layer.setOpacity) {
         layer.setOpacity(style.opacity ?? 1);
       }
@@ -2029,8 +2705,62 @@
         meta.style = cloneJson(style);
         meta.opacity = Number.isFinite(style.opacity) ? style.opacity : (meta.opacity || 1);
       }
+      ensureSelectableLayer(layer);
+      syncLayerSelectionState(layer);
       if (options.refresh) refreshLayers();
       return style;
+    }
+
+    function labelFieldsForGroup(groupName) {
+      const fields = new Set(["name"]);
+      const datasetMeta = getDatasetMeta(groupName) || {};
+      if (datasetMeta.serviceInfo && datasetMeta.serviceInfo.displayField) fields.add(datasetMeta.serviceInfo.displayField);
+      layersInGroup(groupName).forEach((layer) => {
+        publicPropertyEntries(layer).forEach(([field]) => fields.add(field));
+      });
+      return Array.from(fields).sort((a, b) => a.localeCompare(b));
+    }
+
+    function labelTextForLayer(layer, config) {
+      if (!config || !config.field) return "";
+      const value = layerAttributeValue(layer, config.field);
+      if (value == null) return "";
+      return String(value).trim();
+    }
+
+    function labelHtml(text, config) {
+      const color = config && config.color ? config.color : "#eef5f8";
+      const size = Math.max(10, Number(config && config.size) || 12);
+      const halo = config && config.halo ? config.halo : "rgba(7, 16, 23, 0.92)";
+      return `<span style="color:${escapeHtml(color)};font:${size}px/1.2 var(--sans);font-weight:800;letter-spacing:0.12px;text-shadow:0 0 2px ${escapeHtml(halo)},0 1px 4px ${escapeHtml(halo)}">${escapeHtml(text)}</span>`;
+    }
+
+    function applyLayerLabeling(layer, config) {
+      if (!layer || typeof layer.bindTooltip !== "function") return;
+      const text = labelTextForLayer(layer, config);
+      if (!config || !config.field || !text) {
+        if (layer.getTooltip && layer.getTooltip()) layer.unbindTooltip();
+        return;
+      }
+
+      const bucket = layerBucket(layer);
+      const options = {
+        permanent: config.permanent !== false,
+        className: "mapdash-label",
+        direction: bucket === "point" ? "top" : "center",
+        offset: bucket === "point" ? [0, -12] : [0, 0],
+        opacity: 1
+      };
+
+      if (layer.getTooltip && layer.getTooltip()) layer.unbindTooltip();
+      layer.bindTooltip(labelHtml(text, config), options);
+      if (layer.openTooltip) layer.openTooltip();
+    }
+
+    function applyGroupLabeling(groupName) {
+      const meta = getDatasetMeta(groupName);
+      const config = meta && meta.label ? meta.label : null;
+      layersInGroup(groupName).forEach((layer) => applyLayerLabeling(layer, config));
     }
 
     function layerToFeature(layer, options = {}) {
@@ -2062,9 +2792,13 @@
       return feature;
     }
 
-    function loadGeoFeatures(geo, meta = {}) {
+    function loadGeoFeatures(geo, meta = {}, datasetMeta = null) {
+      clearSelection({ silent: true });
+      stopSelectionTool({ silent: true });
+      clearServerLayers();
       state.drawn.clearLayers();
       state.layerMeta = {};
+      state.datasetMeta = datasetMeta && typeof datasetMeta === "object" ? cloneJson(datasetMeta) : {};
 
       const safeGeo = geo || { type: "FeatureCollection", features: [] };
       const safeMeta = meta && typeof meta === "object" ? cloneJson(meta) : {};
@@ -2087,20 +2821,29 @@
           const featureId = feature && feature.properties ? feature.properties[INTERNAL_FIELD_ID] : null;
           if (featureId && safeMeta[featureId]) state.layerMeta[featureId] = safeMeta[featureId];
           state.drawn.addLayer(layer);
-          registerLayer(layer, feature.properties && feature.properties.name ? feature.properties.name : null);
+          registerLayer(
+            layer,
+            feature.properties && feature.properties.name ? feature.properties.name : null,
+            { group: feature.properties && feature.properties.group ? feature.properties.group : null }
+          );
           const finalMeta = getLayerMeta(layer);
           if (finalMeta && finalMeta.group) ensureGroupExists(finalMeta.group);
           if (finalMeta && finalMeta.style) applyLayerSymbology(layer, finalMeta.style);
           if (finalMeta && finalMeta.visible === false) applyLayerVisibility(layer, false);
         }
       });
+
+      ensureFeatureTargetDefaults();
+      syncServerLayers();
     }
 
-    function registerLayer(layer, name) {
+    function registerLayer(layer, name, options = {}) {
       const id = layerKey(layer);
       const props = ensureLayerProperties(layer);
       const suggestedName = safeName(name || props.name, `${layerTypeName(layer)} ${Object.keys(state.layerMeta).length + 1}`);
-      const suggestedGroup = props.group ? ensureGroupExists(props.group) : targetGroupForLayer(layer);
+      const bucket = layerBucket(layer);
+      const requestedGroup = options.group || props.group || (bucket ? targetGroupForLayer(layer) : null);
+      const suggestedGroup = requestedGroup ? ensureGroupExists(requestedGroup, bucket, { style: readLayerStyle(layer) }) : null;
       const suggestedKind = props.kind || layerTypeName(layer);
       if (!state.layerMeta[id]) {
         state.layerMeta[id] = {
@@ -2114,20 +2857,22 @@
         };
       } else {
         if (!state.layerMeta[id].name) state.layerMeta[id].name = suggestedName;
-        if (!state.layerMeta[id].group) state.layerMeta[id].group = suggestedGroup;
+        if (!state.layerMeta[id].group && suggestedGroup) state.layerMeta[id].group = suggestedGroup;
         if (!state.layerMeta[id].kind) state.layerMeta[id].kind = suggestedKind;
         if (!state.layerMeta[id].addedAt) state.layerMeta[id].addedAt = new Date().toISOString();
         if (!state.layerMeta[id].style) state.layerMeta[id].style = readLayerStyle(layer);
       }
 
       props[INTERNAL_FIELD_ID] = id;
+      if (state.layerMeta[id].group) props.group = state.layerMeta[id].group;
       if (layer instanceof L.Circle && typeof layer.getRadius === "function") props.radius_m = Math.round(layer.getRadius());
       if (layer instanceof L.CircleMarker && !(layer instanceof L.Circle) && typeof layer.getRadius === "function") props.radius_px = layer.getRadius();
-      ensureGroupExists(state.layerMeta[id].group);
+      if (state.layerMeta[id].group) ensureGroupExists(state.layerMeta[id].group, bucket, { style: readLayerStyle(layer) });
 
       if (!layer._mapdashPopupBound) {
         layer._mapdashPopupBound = true;
-        layer.on("click", () => {
+        layer.on("click", (event) => {
+          if (handleLayerSelectionClick(layer, event)) return;
           const meta = state.layerMeta[id] || { name: "Layer", kind: layerTypeName(layer), group: "Default" };
           const attrs = publicPropertyEntries(layer)
             .slice(0, 4)
@@ -2135,14 +2880,18 @@
             .join("");
           const popupHtml = `
             <b>${escapeHtml(meta.name)}</b><br>
-            <small>${escapeHtml(meta.kind)} | ${escapeHtml(meta.group || "Default")}</small>
+            <small>${escapeHtml(meta.kind)} | layer: ${escapeHtml(meta.group || "Unassigned")}</small>
             ${attrs ? `<div style="margin-top:8px">${attrs}</div>` : ""}
           `;
           layer.bindPopup(popupHtml).openPopup();
         });
       }
 
-      if (state.layerMeta[id].style) applyLayerSymbology(layer, state.layerMeta[id].style);
+      const groupMeta = getDatasetMeta(state.layerMeta[id].group);
+      const style = groupMeta && groupMeta.style ? groupMeta.style : state.layerMeta[id].style;
+      if (style) applyLayerSymbology(layer, style);
+      if (groupMeta && groupMeta.visible === false) applyLayerVisibility(layer, false);
+      if (state.layerMeta[id].group) applyLayerLabeling(layer, groupMeta && groupMeta.label ? groupMeta.label : null);
     }
 
     function applyDrawStyle() {
@@ -2160,6 +2909,8 @@
         geo,
         meta,
         groups: state.groups,
+        datasetMeta: cloneJson(state.datasetMeta),
+        featureTargets: cloneJson(state.featureTargets),
         projectName: state.projectName,
         featureSeq: state.featureSeq
       }));
@@ -2169,11 +2920,15 @@
 
     function restoreState(serialized) {
       const parsed = JSON.parse(serialized);
-      state.groups = parsed.groups && parsed.groups.length ? parsed.groups.slice() : ["Default"];
+      state.groups = parsed.groups && parsed.groups.length ? parsed.groups.slice() : [];
+      state.datasetMeta = parsed.datasetMeta && typeof parsed.datasetMeta === "object" ? cloneJson(parsed.datasetMeta) : {};
+      state.featureTargets = parsed.featureTargets && typeof parsed.featureTargets === "object"
+        ? { ...state.featureTargets, ...parsed.featureTargets }
+        : state.featureTargets;
       state.projectName = parsed.projectName || state.projectName || "untitled";
       state.featureSeq = Number.isFinite(parsed.featureSeq) ? parsed.featureSeq : state.featureSeq;
       ui.projectTag.textContent = `project: ${state.projectName}`;
-      loadGeoFeatures(parsed.geo || { type: "FeatureCollection", features: [] }, parsed.meta || {});
+      loadGeoFeatures(parsed.geo || { type: "FeatureCollection", features: [] }, parsed.meta || {}, state.datasetMeta);
       refreshLayers();
       updateStatus();
     }
@@ -2202,8 +2957,9 @@
 
     function updateStatus() {
       ui.zoom.textContent = `z: ${state.map.getZoom()}`;
-      ui.features.textContent = `features: ${state.drawn.getLayers().length}`;
-      ui.layerCount.textContent = String(state.drawn.getLayers().length);
+      ui.selected.textContent = `selected: ${selectionCount()}`;
+      ui.features.textContent = `features: ${featureLayers().length}`;
+      ui.layerCount.textContent = String(state.groups.length);
       const c = state.map.getCenter();
       updateLayerDrawerCoords(c);
     }
@@ -2219,7 +2975,9 @@
     }
 
     function setLayerOpacity(layer, value) {
-      const meta = getLayerMeta(layer);
+      const groupName = layerGroupName(layer);
+      const datasetMeta = groupName ? getDatasetMeta(groupName) : null;
+      const meta = state.layerMeta[layerKey(layer)] || (datasetMeta && isServerBackedGroup(groupName) ? datasetMeta : null);
       if (!meta) return;
       meta.opacity = value;
       meta.style = {
@@ -2285,7 +3043,7 @@
 
       if (format === "csv") {
         const userFields = publicPropertyKeys([layer]);
-        const rows = [["name", "group", "type", "lat", "lng"].concat(userFields)];
+        const rows = [["name", "layer", "type", "lat", "lng"].concat(userFields)];
         if (layer.getLatLng) {
           const ll = layer.getLatLng();
           rows.push([meta.name, meta.group, meta.kind, ll.lat, ll.lng].concat(userFields.map((field) => layerAttributeValue(layer, field))));
@@ -2339,7 +3097,8 @@
       }
 
       if (field === "group") {
-        meta.group = ensureGroupExists(rawValue || meta.group || "Default");
+        meta.group = ensureGroupExists(rawValue || meta.group || "Default", layerBucket(layer), { style: meta.style || readLayerStyle(layer) });
+        ensureLayerProperties(layer).group = meta.group;
         return;
       }
 
@@ -2348,14 +3107,23 @@
       props[field] = coerceAttributeValue(rawValue, props[field]);
     }
 
-    function scopeOptionsMarkup(selected = "all") {
-      return [`<option value="all" ${selected === "all" ? "selected" : ""}>All Feature Layers</option>`]
-        .concat(state.groups.map((group) => `<option value="${escapeHtml(group)}" ${group === selected ? "selected" : ""}>${escapeHtml(group)}</option>`))
+    function scopeOptionsMarkup(selected = "all", options = {}) {
+      const allLabel = options.allLabel || "All Layers";
+      const baseOptions = [`<option value="all" ${selected === "all" ? "selected" : ""}>${escapeHtml(allLabel)}</option>`];
+      if (options.includeSelected) {
+        const selectedLabel = options.selectedLabel || "Selected Features";
+        baseOptions.push(`<option value="selected" ${selected === "selected" ? "selected" : ""}>${escapeHtml(selectedLabel)} (${layersInScope("selected", { editableOnly: options.editableOnly === true }).length})</option>`);
+      }
+      return baseOptions
+        .concat(state.groups
+          .slice()
+          .sort((a, b) => a.localeCompare(b))
+          .map((group) => `<option value="${escapeHtml(group)}" ${group === selected ? "selected" : ""}>${escapeHtml(group)} (${layersInScope(group, { editableOnly: options.editableOnly === true }).length})</option>`))
         .join("");
     }
 
     function openFieldManager(initialScope = "all") {
-      const allFeatureLayers = layersInScope("all");
+      const allFeatureLayers = layersInScope("all", { editableOnly: true });
       const fieldOptions = publicPropertyKeys(allFeatureLayers)
         .map((field) => `<option value="${escapeHtml(field)}">${escapeHtml(field)}</option>`)
         .join("");
@@ -2364,9 +3132,9 @@
         "Schema Tools",
         `
           <div class="note-grid">
-            <p class="modal-text">Add or remove attribute fields across a group or across all editable feature layers.</p>
+            <p class="modal-text">Add or remove attribute fields across a layer or across all editable layers.</p>
             <div class="row">
-              <select id="fieldScope" class="field">${scopeOptionsMarkup(initialScope)}</select>
+              <select id="fieldScope" class="field">${scopeOptionsMarkup(initialScope, { allLabel: "All Editable Layers", includeSelected: true, selectedLabel: "Selected Editable Features", editableOnly: true })}</select>
               <select id="fieldAction" class="field">
                 <option value="add">Add field</option>
                 <option value="delete">Delete field</option>
@@ -2392,7 +3160,7 @@
             onClick: () => {
               const scope = document.getElementById("fieldScope").value || "all";
               const action = document.getElementById("fieldAction").value;
-              const targetLayers = layersInScope(scope);
+              const targetLayers = layersInScope(scope, { editableOnly: true });
               if (!targetLayers.length) {
                 toast("No editable features in that scope", 2200);
                 return;
@@ -2446,7 +3214,7 @@
         "Attribute Table",
         `
           <div class="table-toolbar">
-            <select id="attributeScope" class="field">${scopeOptionsMarkup(initialScope)}</select>
+            <select id="attributeScope" class="field">${scopeOptionsMarkup(initialScope, { includeSelected: true })}</select>
             <input id="attributeSearch" class="field" placeholder="Search rows or values" />
             <span class="pill" id="attributeStats">0 rows</span>
           </div>
@@ -2473,7 +3241,9 @@
             onClick: () => {
               const inputs = Array.from(ui.modalBody.querySelectorAll("[data-attr-layer][data-attr-field]"));
               inputs.forEach((input) => {
+                if (input.disabled) return;
                 const layer = findLayerById(input.getAttribute("data-attr-layer"));
+                if (!layer || isServerBackedGroup(layerGroupName(layer))) return;
                 if (!layer) return;
                 setLayerAttributeValue(layer, input.getAttribute("data-attr-field"), input.value);
               });
@@ -2511,37 +3281,51 @@
         const fields = publicPropertyKeys(layers);
         head.innerHTML = `
           <tr>
+            <th>Sel</th>
             <th>#</th>
             <th>Name</th>
-            <th>Group</th>
-            <th>Kind</th>
+            <th>Layer</th>
+            <th>Geometry</th>
             ${fields.map((field) => `<th>${escapeHtml(field)}</th>`).join("")}
             <th>Actions</th>
           </tr>
         `;
 
         if (!layers.length) {
-          body.innerHTML = `<tr><td colspan="${fields.length + 5}">No features in this scope.</td></tr>`;
+          body.innerHTML = `<tr><td colspan="${fields.length + 6}">No features in this scope.</td></tr>`;
           stats.textContent = "0 rows";
           return;
         }
 
+        const readOnlyCount = layers.filter((layer) => isServerBackedGroup(layerGroupName(layer))).length;
         body.innerHTML = layers.map((layer, index) => {
           const layerId = layerKey(layer);
           const meta = getLayerMeta(layer);
+          const readOnly = isServerBackedGroup(layerGroupName(layer));
+          const lockAttr = readOnly ? "readonly disabled" : "";
           return `
-            <tr>
+            <tr class="${isLayerSelected(layer) ? "selected-row" : ""}">
+              <td class="cell-fixed"><input type="checkbox" data-select-row="${layerId}" ${isLayerSelected(layer) ? "checked" : ""} /></td>
               <td class="cell-fixed">${index + 1}</td>
-              <td><input class="field attr-input" data-attr-layer="${layerId}" data-attr-field="name" value="${escapeHtml(layerAttributeValue(layer, "name"))}" /></td>
-              <td><input class="field attr-input" data-attr-layer="${layerId}" data-attr-field="group" value="${escapeHtml(layerAttributeValue(layer, "group"))}" /></td>
-              <td class="cell-fixed">${escapeHtml(meta && meta.kind ? meta.kind : layerTypeName(layer))}</td>
-              ${fields.map((field) => `<td><input class="field attr-input" data-attr-layer="${layerId}" data-attr-field="${escapeHtml(field)}" value="${escapeHtml(layerAttributeValue(layer, field))}" /></td>`).join("")}
+              <td><input class="field attr-input" ${lockAttr} data-attr-layer="${layerId}" data-attr-field="name" value="${escapeHtml(layerAttributeValue(layer, "name"))}" /></td>
+              <td class="cell-fixed">${escapeHtml(layerAttributeValue(layer, "group"))}</td>
+              <td class="cell-fixed">${escapeHtml(meta && meta.kind ? meta.kind : layerTypeName(layer))}${readOnly ? " • live" : ""}</td>
+              ${fields.map((field) => `<td><input class="field attr-input" ${lockAttr} data-attr-layer="${layerId}" data-attr-field="${escapeHtml(field)}" value="${escapeHtml(layerAttributeValue(layer, field))}" /></td>`).join("")}
               <td class="cell-fixed"><button class="btn" data-zoom-layer="${layerId}"><i class="fa-solid fa-location-dot"></i> Zoom</button></td>
             </tr>
           `;
         }).join("");
 
-        stats.textContent = `${layers.length} row${layers.length === 1 ? "" : "s"} • ${fields.length} field${fields.length === 1 ? "" : "s"}`;
+        const selectedCountInScope = layers.filter((layer) => isLayerSelected(layer)).length;
+        stats.textContent = `${layers.length} row${layers.length === 1 ? "" : "s"} • ${fields.length} field${fields.length === 1 ? "" : "s"} • ${selectedCountInScope} selected${readOnlyCount ? ` • ${readOnlyCount} live read-only` : ""}`;
+        body.querySelectorAll("[data-select-row]").forEach((input) => {
+          input.addEventListener("change", () => {
+            const layer = findLayerById(input.getAttribute("data-select-row"));
+            if (!layer) return;
+            applySelectionOperation([layer], input.checked ? "add" : "remove", { silent: true });
+            renderTable();
+          });
+        });
         body.querySelectorAll("[data-zoom-layer]").forEach((btn) => {
           btn.addEventListener("click", () => {
             const layer = findLayerById(btn.getAttribute("data-zoom-layer"));
@@ -2553,6 +3337,584 @@
       scopeEl.addEventListener("change", renderTable);
       searchEl.addEventListener("input", renderTable);
       renderTable();
+    }
+
+    function attributeFieldsForScope(scope) {
+      return Array.from(new Set(META_FIELDS.concat(publicPropertyKeys(layersInScope(scope))))).filter(Boolean);
+    }
+
+    function attributeSelectionMatch(layer, field, operator, rawValue) {
+      const value = layerAttributeValue(layer, field);
+      const text = String(value ?? "").trim();
+      const compare = String(rawValue ?? "").trim();
+      const textLower = text.toLowerCase();
+      const compareLower = compare.toLowerCase();
+      const leftNumber = Number(text);
+      const rightNumber = Number(compare);
+
+      if (operator === "is-blank") return !text;
+      if (operator === "is-not-blank") return !!text;
+      if (operator === "contains") return textLower.includes(compareLower);
+      if (operator === "equals") return textLower === compareLower;
+      if (operator === "not-equals") return textLower !== compareLower;
+      if (operator === "starts-with") return textLower.startsWith(compareLower);
+      if (operator === "ends-with") return textLower.endsWith(compareLower);
+      if (operator === ">") return Number.isFinite(leftNumber) && Number.isFinite(rightNumber) && leftNumber > rightNumber;
+      if (operator === ">=") return Number.isFinite(leftNumber) && Number.isFinite(rightNumber) && leftNumber >= rightNumber;
+      if (operator === "<") return Number.isFinite(leftNumber) && Number.isFinite(rightNumber) && leftNumber < rightNumber;
+      if (operator === "<=") return Number.isFinite(leftNumber) && Number.isFinite(rightNumber) && leftNumber <= rightNumber;
+      return false;
+    }
+
+    function selectByAttribute() {
+      modalOpen(
+        "Select By Attribute",
+        `
+          <div class="note-grid">
+            <div class="row">
+              <select id="selectAttrScope" class="field">${scopeOptionsMarkup("all", { includeSelected: true })}</select>
+              <select id="selectAttrMethod" class="field">
+                <option value="new">New selection</option>
+                <option value="add">Add to selection</option>
+                <option value="remove">Remove from selection</option>
+                <option value="subset">Select subset from current</option>
+              </select>
+            </div>
+            <div class="row">
+              <select id="selectAttrField" class="field"></select>
+              <select id="selectAttrOperator" class="field">
+                <option value="contains">Contains</option>
+                <option value="equals">Equals</option>
+                <option value="not-equals">Does not equal</option>
+                <option value="starts-with">Starts with</option>
+                <option value="ends-with">Ends with</option>
+                <option value=">">Greater than</option>
+                <option value=">=">Greater than or equal</option>
+                <option value="<">Less than</option>
+                <option value="<=">Less than or equal</option>
+                <option value="is-blank">Is blank</option>
+                <option value="is-not-blank">Is not blank</option>
+              </select>
+            </div>
+            <input id="selectAttrValue" class="field" placeholder="Comparison value" />
+          </div>
+        `,
+        [
+          { label: "Close", onClick: modalClose },
+          {
+            label: "Select",
+            variant: "brand",
+            onClick: () => {
+              const scope = document.getElementById("selectAttrScope").value || "all";
+              const field = document.getElementById("selectAttrField").value;
+              const operator = document.getElementById("selectAttrOperator").value;
+              const value = document.getElementById("selectAttrValue").value;
+              const method = document.getElementById("selectAttrMethod").value;
+              const targetLayers = layersInScope(scope);
+              if (!targetLayers.length || !field) {
+                toast("No features in that scope", 2200);
+                return;
+              }
+              const matches = targetLayers.filter((layer) => attributeSelectionMatch(layer, field, operator, value));
+              applySelectionOperation(matches, method, {
+                scopeLayers: targetLayers,
+                message: `Selected ${matches.length} feature(s)`
+              });
+              modalClose();
+            }
+          }
+        ]
+      );
+
+      const scopeEl = document.getElementById("selectAttrScope");
+      const fieldEl = document.getElementById("selectAttrField");
+      const operatorEl = document.getElementById("selectAttrOperator");
+      const valueEl = document.getElementById("selectAttrValue");
+
+      const refreshFields = () => {
+        const fields = attributeFieldsForScope(scopeEl.value || "all");
+        fieldEl.innerHTML = fields.length
+          ? fields.map((field) => `<option value="${escapeHtml(field)}">${escapeHtml(field)}</option>`).join("")
+          : "<option value=''>No fields available</option>";
+      };
+
+      const refreshValueVisibility = () => {
+        const hide = ["is-blank", "is-not-blank"].includes(operatorEl.value);
+        valueEl.disabled = hide;
+        valueEl.placeholder = hide ? "No value needed for this operator" : "Comparison value";
+      };
+
+      scopeEl.addEventListener("change", refreshFields);
+      operatorEl.addEventListener("change", refreshValueVisibility);
+      refreshFields();
+      refreshValueVisibility();
+    }
+
+    function spatialRelationMatches(targetFeature, sourceFeature, relation, distanceMiles) {
+      if (!targetFeature || !targetFeature.geometry || !sourceFeature || !sourceFeature.geometry) return false;
+      try {
+        if (relation === "intersects") return turf.booleanIntersects(targetFeature, sourceFeature);
+        if (relation === "within") return typeof turf.booleanWithin === "function" && turf.booleanWithin(targetFeature, sourceFeature);
+        if (relation === "contains") return typeof turf.booleanContains === "function" && turf.booleanContains(targetFeature, sourceFeature);
+        if (relation === "touches") return typeof turf.booleanTouches === "function" && turf.booleanTouches(targetFeature, sourceFeature);
+        if (relation === "overlaps") return typeof turf.booleanOverlap === "function" && turf.booleanOverlap(targetFeature, sourceFeature);
+        if (relation === "crosses") return typeof turf.booleanCrosses === "function" && turf.booleanCrosses(targetFeature, sourceFeature);
+        if (relation === "within-distance") {
+          const buffer = turf.buffer(sourceFeature, Math.max(0.01, distanceMiles || 1), { units: "miles" });
+          return turf.booleanIntersects(targetFeature, buffer);
+        }
+      } catch (_) {
+      }
+      return false;
+    }
+
+    function selectByLocation() {
+      modalOpen(
+        "Select By Location",
+        `
+          <div class="note-grid">
+            <div class="row">
+              <select id="selectLocationTarget" class="field">${scopeOptionsMarkup("all", { includeSelected: true })}</select>
+              <select id="selectLocationSource" class="field">${scopeOptionsMarkup("all", { includeSelected: true })}</select>
+            </div>
+            <div class="row">
+              <select id="selectLocationRelation" class="field">
+                <option value="intersects">Intersects</option>
+                <option value="within">Within</option>
+                <option value="contains">Contains</option>
+                <option value="touches">Touches</option>
+                <option value="overlaps">Overlaps</option>
+                <option value="crosses">Crosses</option>
+                <option value="within-distance">Within distance</option>
+              </select>
+              <select id="selectLocationMethod" class="field">
+                <option value="new">New selection</option>
+                <option value="add">Add to selection</option>
+                <option value="remove">Remove from selection</option>
+                <option value="subset">Select subset from current</option>
+              </select>
+            </div>
+            <input id="selectLocationDistance" class="field" type="number" min="0.01" step="0.1" value="1" placeholder="Distance in miles" />
+          </div>
+        `,
+        [
+          { label: "Close", onClick: modalClose },
+          {
+            label: "Select",
+            variant: "brand",
+            onClick: () => {
+              const targetScope = document.getElementById("selectLocationTarget").value || "all";
+              const sourceScope = document.getElementById("selectLocationSource").value || "all";
+              const relation = document.getElementById("selectLocationRelation").value;
+              const method = document.getElementById("selectLocationMethod").value;
+              const distanceMiles = Number(document.getElementById("selectLocationDistance").value);
+              const targetLayers = layersInScope(targetScope);
+              const sourceLayers = layersInScope(sourceScope);
+              if (!targetLayers.length || !sourceLayers.length) {
+                toast("Need both target and source features", 2200);
+                return;
+              }
+
+              const matches = targetLayers.filter((targetLayer) => {
+                const targetFeature = layerToFeature(targetLayer, { includeInternal: false });
+                return sourceLayers.some((sourceLayer) => {
+                  if (layerKey(targetLayer) === layerKey(sourceLayer)) return false;
+                  return spatialRelationMatches(
+                    targetFeature,
+                    layerToFeature(sourceLayer, { includeInternal: false }),
+                    relation,
+                    distanceMiles
+                  );
+                });
+              });
+
+              applySelectionOperation(matches, method, {
+                scopeLayers: targetLayers,
+                message: `Selected ${matches.length} feature(s)`
+              });
+              modalClose();
+            }
+          }
+        ]
+      );
+
+      const relationEl = document.getElementById("selectLocationRelation");
+      const distanceEl = document.getElementById("selectLocationDistance");
+      const refreshDistanceVisibility = () => {
+        const enabled = relationEl.value === "within-distance";
+        distanceEl.disabled = !enabled;
+        distanceEl.placeholder = enabled ? "Distance in miles" : "Only used for within-distance";
+      };
+      relationEl.addEventListener("change", refreshDistanceVisibility);
+      refreshDistanceVisibility();
+    }
+
+    function stopSelectionTool(options = {}) {
+      const tool = state.selectionTool;
+      if (!tool) return;
+      if (tool.preview && state.map && state.map.hasLayer(tool.preview)) state.map.removeLayer(tool.preview);
+      if (tool.guide && state.map && state.map.hasLayer(tool.guide)) state.map.removeLayer(tool.guide);
+      state.map.off("mousedown", boxSelectionMouseDown);
+      state.map.off("mousemove", boxSelectionMouseMove);
+      state.map.off("mouseup", boxSelectionMouseUp);
+      state.map.off("click", polygonSelectionMapClick);
+      state.map.off("click", radiusSelectionMapClick);
+      state.map.off("mousemove", polygonSelectionMouseMove);
+      state.map.off("dblclick", polygonSelectionMapDoubleClick);
+      if (state.map && state.map.dragging) state.map.dragging.enable();
+      if (state.map && state.map.doubleClickZoom) state.map.doubleClickZoom.enable();
+      if (state.map) state.map.getContainer().style.cursor = "";
+      state.selectionTool = null;
+      if (!options.silent && options.message) toast(options.message, options.ms || 1800);
+    }
+
+    async function startInteractiveSelection() {
+      const data = await modalForm(
+        "Click Selection",
+        `
+          <select id="interactiveSelectionScope" class="field">${scopeOptionsMarkup("all")}</select>
+          <select id="interactiveSelectionMethod" class="field">
+            <option value="new">New selection</option>
+            <option value="add">Add to selection</option>
+            <option value="remove">Remove from selection</option>
+            <option value="toggle">Toggle selection</option>
+          </select>
+          <p class="tiny">Choose a layer, then click features on the map. Shift adds, Ctrl/Cmd toggles, Alt removes, Esc exits.</p>
+        `,
+        () => ({
+          scope: document.getElementById("interactiveSelectionScope").value || "all",
+          method: document.getElementById("interactiveSelectionMethod").value || "new"
+        })
+      );
+      if (!data) return;
+      cancelSketchTool();
+      stopSelectionTool({ silent: true });
+      state.selectionTool = { type: "click", scope: data.scope, method: data.method };
+      state.map.getContainer().style.cursor = selectionCursorForTool("click");
+      toast(`Click select armed: ${data.scope}`, 2400);
+    }
+
+    function boundsSelectionMatch(layer, bounds) {
+      if (!layer || !bounds || !bounds.isValid()) return false;
+      if (typeof layer.getLatLng === "function") return bounds.contains(layer.getLatLng());
+      if (typeof layer.getBounds === "function") {
+        const layerBounds = layer.getBounds();
+        return layerBounds && layerBounds.isValid && layerBounds.isValid() ? bounds.intersects(layerBounds) : false;
+      }
+      return false;
+    }
+
+    function boxSelectionMouseDown(event) {
+      const tool = state.selectionTool;
+      if (!tool || tool.type !== "box") return;
+      tool.start = event.latlng;
+      if (tool.preview && state.map.hasLayer(tool.preview)) state.map.removeLayer(tool.preview);
+      tool.preview = L.rectangle(L.latLngBounds(event.latlng, event.latlng), {
+        color: "#ffd17e",
+        weight: 2,
+        dashArray: "6,6",
+        fillOpacity: 0.05,
+        interactive: false
+      }).addTo(state.map);
+    }
+
+    function boxSelectionMouseMove(event) {
+      const tool = state.selectionTool;
+      if (!tool || tool.type !== "box" || !tool.start || !tool.preview) return;
+      tool.preview.setBounds(L.latLngBounds(tool.start, event.latlng));
+    }
+
+    function boxSelectionMouseUp(event) {
+      const tool = state.selectionTool;
+      if (!tool || tool.type !== "box" || !tool.start) return;
+      const bounds = L.latLngBounds(tool.start, event.latlng);
+      const scopeLayers = layersInScope(tool.scope);
+      const matches = scopeLayers.filter((layer) => boundsSelectionMatch(layer, bounds));
+      applySelectionOperation(matches, tool.method, {
+        scopeLayers,
+        silent: true
+      });
+      stopSelectionTool({ silent: true });
+      toast(`Selected ${matches.length} feature(s)`, 1800);
+    }
+
+    async function startBoxSelection() {
+      const data = await modalForm(
+        "Box Selection",
+        `
+          <div class="row">
+            <select id="boxSelectionScope" class="field">${scopeOptionsMarkup("all")}</select>
+            <select id="boxSelectionMethod" class="field">
+              <option value="new">New selection</option>
+              <option value="add">Add to selection</option>
+              <option value="remove">Remove from selection</option>
+              <option value="subset">Select subset from current</option>
+            </select>
+          </div>
+          <p class="tiny">Drag a rectangle on the map to select features in that extent.</p>
+        `,
+        () => ({
+          scope: document.getElementById("boxSelectionScope").value || "all",
+          method: document.getElementById("boxSelectionMethod").value || "new"
+        })
+      );
+      if (!data) return;
+      cancelSketchTool();
+      stopSelectionTool({ silent: true });
+      state.selectionTool = {
+        type: "box",
+        scope: data.scope,
+        method: data.method,
+        start: null,
+        preview: null
+      };
+      state.map.dragging.disable();
+      state.map.getContainer().style.cursor = selectionCursorForTool("box");
+      state.map.on("mousedown", boxSelectionMouseDown);
+      state.map.on("mousemove", boxSelectionMouseMove);
+      state.map.on("mouseup", boxSelectionMouseUp);
+      toast(`Box select armed: ${data.scope}`, 2200);
+    }
+
+    function polygonSelectionMouseMove(event) {
+      const tool = state.selectionTool;
+      if (!tool || tool.type !== "polygon" || !tool.points.length || !tool.guide) return;
+      tool.guide.setLatLngs(tool.points.concat([event.latlng]));
+      if (tool.preview && tool.points.length >= 2) tool.preview.setLatLngs(tool.points.concat([event.latlng]));
+    }
+
+    function polygonSelectionMapClick(event) {
+      const tool = state.selectionTool;
+      if (!tool || tool.type !== "polygon") return;
+      tool.points.push(event.latlng);
+      if (tool.guide) tool.guide.setLatLngs(tool.points);
+      if (tool.preview) tool.preview.setLatLngs(tool.points);
+    }
+
+    function polygonSelectionMapDoubleClick(event) {
+      const tool = state.selectionTool;
+      if (!tool || tool.type !== "polygon") return;
+      if (event && event.originalEvent) {
+        event.originalEvent.preventDefault();
+        event.originalEvent.stopPropagation();
+      }
+      if (tool.points.length < 3) {
+        toast("Polygon selection needs at least 3 points", 2200);
+        return;
+      }
+      const coords = tool.points.map((point) => [point.lng, point.lat]);
+      coords.push([tool.points[0].lng, tool.points[0].lat]);
+      const polygon = turf.polygon([coords]);
+      const scopeLayers = layersInScope(tool.scope);
+      const matches = scopeLayers.filter((layer) => {
+        try {
+          return turf.booleanIntersects(layerToFeature(layer, { includeInternal: false }), polygon);
+        } catch (_) {
+          return false;
+        }
+      });
+      applySelectionOperation(matches, tool.method, {
+        scopeLayers,
+        silent: true
+      });
+      stopSelectionTool({ silent: true });
+      toast(`Selected ${matches.length} feature(s)`, 1800);
+    }
+
+    async function startPolygonSelection() {
+      const data = await modalForm(
+        "Polygon Selection",
+        `
+          <div class="row">
+            <select id="polygonSelectionScope" class="field">${scopeOptionsMarkup("all")}</select>
+            <select id="polygonSelectionMethod" class="field">
+              <option value="new">New selection</option>
+              <option value="add">Add to selection</option>
+              <option value="remove">Remove from selection</option>
+              <option value="subset">Select subset from current</option>
+            </select>
+          </div>
+          <p class="tiny">Choose a layer, click to draw a selection polygon, and double-click to finish.</p>
+        `,
+        () => ({
+          scope: document.getElementById("polygonSelectionScope").value || "all",
+          method: document.getElementById("polygonSelectionMethod").value || "new"
+        })
+      );
+      if (!data) return;
+      cancelSketchTool();
+      stopSelectionTool({ silent: true });
+      state.selectionTool = {
+        type: "polygon",
+        scope: data.scope,
+        method: data.method,
+        points: [],
+        guide: L.polyline([], {
+          color: "#ffd17e",
+          weight: 2,
+          dashArray: "6,6",
+          interactive: false
+        }).addTo(state.map),
+        preview: L.polygon([], {
+          color: "#ffd17e",
+          weight: 2,
+          fillOpacity: 0.06,
+          interactive: false
+        }).addTo(state.map)
+      };
+      if (state.map.doubleClickZoom) state.map.doubleClickZoom.disable();
+      state.map.getContainer().style.cursor = selectionCursorForTool("polygon");
+      state.map.on("click", polygonSelectionMapClick);
+      state.map.on("mousemove", polygonSelectionMouseMove);
+      state.map.on("dblclick", polygonSelectionMapDoubleClick);
+      toast(`Polygon select armed: ${data.scope}`, 2400);
+    }
+
+    function radiusSelectionMapClick(event) {
+      const tool = state.selectionTool;
+      if (!tool || tool.type !== "radius") return;
+      const scopeLayers = layersInScope(tool.scope);
+      const searchFeature = turf.circle([event.latlng.lng, event.latlng.lat], tool.miles, { units: "miles", steps: 72 });
+      const preview = L.geoJSON(searchFeature, {
+        style: { color: "#ffd17e", weight: 2, dashArray: "6,6", fillOpacity: 0.04 }
+      }).addTo(state.map);
+      setTimeout(() => {
+        if (state.map.hasLayer(preview)) state.map.removeLayer(preview);
+      }, 1800);
+
+      const matches = scopeLayers.filter((layer) => {
+        try {
+          return turf.booleanIntersects(layerToFeature(layer, { includeInternal: false }), searchFeature);
+        } catch (_) {
+          return false;
+        }
+      });
+
+      applySelectionOperation(matches, tool.method, {
+        scopeLayers,
+        silent: true
+      });
+      stopSelectionTool({ silent: true });
+      toast(`Selected ${matches.length} feature(s)`, 1800);
+    }
+
+    async function selectByRadius() {
+      const data = await modalForm(
+        "Radius Selection",
+        `
+          <div class="row">
+            <select id="radiusSelectionScope" class="field">${scopeOptionsMarkup("all")}</select>
+            <select id="radiusSelectionMethod" class="field">
+              <option value="new">New selection</option>
+              <option value="add">Add to selection</option>
+              <option value="remove">Remove from selection</option>
+              <option value="subset">Select subset from current</option>
+            </select>
+          </div>
+          <input id="radiusSelectionMiles" class="field" type="number" min="0.01" step="0.1" value="1" />
+          <p class="tiny">After Apply, click the center point for the search radius.</p>
+        `,
+        () => ({
+          scope: document.getElementById("radiusSelectionScope").value || "all",
+          method: document.getElementById("radiusSelectionMethod").value || "new",
+          miles: Number(document.getElementById("radiusSelectionMiles").value)
+        })
+      );
+      if (!data || !Number.isFinite(data.miles) || data.miles <= 0) return;
+
+      cancelSketchTool();
+      stopSelectionTool({ silent: true });
+      state.selectionTool = {
+        type: "radius",
+        scope: data.scope,
+        method: data.method,
+        miles: data.miles
+      };
+      state.map.getContainer().style.cursor = selectionCursorForTool("radius");
+      state.map.on("click", radiusSelectionMapClick);
+      toast(`Radius select armed: ${data.scope}`, 2400);
+    }
+
+    function zoomToSelection() {
+      const layers = selectedFeatureLayers();
+      if (!layers.length) {
+        modalInfo("Selection", selectionCount() ? "Selected features are currently outside the loaded view." : "No features are selected.");
+        return;
+      }
+      const bounds = L.featureGroup(layers).getBounds();
+      if (bounds.isValid()) state.map.fitBounds(bounds.pad(0.2));
+    }
+
+    function openSelectionSummary() {
+      const layers = selectedFeatureLayers();
+      const totalSelected = selectionCount();
+      if (!totalSelected) {
+        modalInfo("Selection Summary", "No features are selected.");
+        return;
+      }
+
+      const countsByGroup = {};
+      let pointCount = 0;
+      let lineCount = 0;
+      let polygonCount = 0;
+      let lineKm = 0;
+      let areaKm2 = 0;
+
+      layers.forEach((layer) => {
+        const group = layerGroupName(layer) || "Unassigned";
+        countsByGroup[group] = (countsByGroup[group] || 0) + 1;
+        const feature = layerToFeature(layer, { includeInternal: false });
+        const type = feature && feature.geometry ? feature.geometry.type : "";
+        if (type === "Point" || type === "MultiPoint") pointCount += 1;
+        if (type === "LineString" || type === "MultiLineString") {
+          lineCount += 1;
+          lineKm += turf.length(feature, { units: "kilometers" });
+        }
+        if (type === "Polygon" || type === "MultiPolygon") {
+          polygonCount += 1;
+          areaKm2 += turf.area(feature) / 1000000;
+        }
+      });
+
+      const unloadedCount = Math.max(0, totalSelected - layers.length);
+      const groupRows = Object.entries(countsByGroup)
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([group, count]) => `<div><b>${escapeHtml(group)}</b>: ${count}</div>`)
+        .join("");
+
+      modalOpen(
+        "Selection Summary",
+        `
+          <div class="modal-text">
+            <div><b>Total selected:</b> ${totalSelected}</div>
+            <div><b>Loaded now:</b> ${layers.length}</div>
+            <div><b>Points:</b> ${pointCount}</div>
+            <div><b>Lines:</b> ${lineCount} • ${lineKm.toFixed(2)} km</div>
+            <div><b>Polygons:</b> ${polygonCount} • ${areaKm2.toFixed(2)} km2</div>
+            ${unloadedCount ? `<div><b>Outside current loaded view:</b> ${unloadedCount}</div>` : ""}
+            <div style="margin-top:10px">${groupRows || "No loaded features available."}</div>
+          </div>
+        `,
+        [{ label: "Close", variant: "brand", onClick: modalClose }]
+      );
+    }
+
+    function copySelectedToLayer() {
+      const layers = selectedFeatureLayers();
+      if (!layers.length) {
+        modalInfo("Copy Selected", selectionCount() ? "Selected features are outside the current loaded view." : "No features are selected.");
+        return;
+      }
+
+      const copiedFeatures = layers
+        .map((layer) => layerToFeature(layer, { includeInternal: false }))
+        .filter(Boolean);
+      const groupName = uniqueGroupName("Selected Features");
+      const geoLayer = L.geoJSON({ type: "FeatureCollection", features: copiedFeatures });
+      const count = registerLayersAsDataset(geoLayer.getLayers(), groupName);
+      snapshot();
+      refreshLayers();
+      toast(`Copied ${count} selected feature(s)`);
     }
 
     async function editLayerSymbology(layer) {
@@ -2660,32 +4022,372 @@
       );
     }
 
+    function setGroupVisibility(groupName, visible) {
+      ensureGroupExists(groupName, inferGroupGeometryType(groupName));
+      state.datasetMeta[groupName].visible = visible;
+      if (!isServerBackedGroup(groupName)) layersInGroup(groupName).forEach((layer) => applyLayerVisibility(layer, visible));
+      setServerLayerVisibility(groupName, visible);
+    }
+
+    function setGroupOpacity(groupName, value) {
+      ensureGroupExists(groupName, inferGroupGeometryType(groupName));
+      state.datasetMeta[groupName].opacity = value;
+      state.datasetMeta[groupName].style = {
+        ...(state.datasetMeta[groupName].style || defaultStyleForBucket(inferGroupGeometryType(groupName) || "polygon")),
+        opacity: value,
+        fillOpacity: Number.isFinite(state.datasetMeta[groupName].style && state.datasetMeta[groupName].style.fillOpacity)
+          ? Math.min(state.datasetMeta[groupName].style.fillOpacity, value)
+          : state.datasetMeta[groupName].style && state.datasetMeta[groupName].style.markerShape
+            ? state.datasetMeta[groupName].style.fillOpacity
+            : Math.min(value, 0.4)
+      };
+      layersInGroup(groupName).forEach((layer) => setLayerOpacity(layer, value));
+    }
+
+    function zoomToGroup(groupName) {
+      const layers = layersInGroup(groupName);
+      if (!layers.length) {
+        const meta = getDatasetMeta(groupName);
+        const serviceExtent = meta && meta.serviceInfo ? arcGisEnvelopeToBounds(meta.serviceInfo.extent4326 || meta.serviceInfo.extent) : null;
+        if (serviceExtent && serviceExtent.isValid()) {
+          state.map.fitBounds(serviceExtent.pad(0.1));
+          return;
+        }
+        toast("Layer has no features", 2200);
+        return;
+      }
+      const bounds = L.featureGroup(layers).getBounds();
+      if (bounds.isValid()) state.map.fitBounds(bounds.pad(0.2));
+    }
+
+    function renameGroup(oldName, nextName) {
+      const trimmed = safeName(nextName, oldName);
+      if (!trimmed || trimmed === oldName) return oldName;
+      const finalName = state.groups.includes(trimmed) ? uniqueGroupName(trimmed) : trimmed;
+      const members = layersInGroup(oldName);
+      members.forEach((layer) => {
+        const meta = getLayerMeta(layer);
+        if (meta) meta.group = finalName;
+        if (layer._mapdashGroup) layer._mapdashGroup = finalName;
+        const id = layerKey(layer);
+        if (String(id).startsWith(`${oldName}::`)) {
+          const nextId = `${finalName}::${String(id).slice(oldName.length + 2)}`;
+          layer._mapdashId = nextId;
+          ensureLayerProperties(layer)[INTERNAL_FIELD_ID] = nextId;
+        }
+        ensureLayerProperties(layer).group = finalName;
+      });
+      state.groups = state.groups.map((group) => group === oldName ? finalName : group);
+      const meta = state.datasetMeta[oldName] || {};
+      delete state.datasetMeta[oldName];
+      state.datasetMeta[finalName] = meta;
+      if (state.serverLayers[oldName]) {
+        const entry = state.serverLayers[oldName];
+        delete state.serverLayers[oldName];
+        entry.groupName = finalName;
+        state.serverLayers[finalName] = entry;
+      }
+      state.selectedIds = (state.selectedIds || []).map((id) => String(id).startsWith(`${oldName}::`) ? `${finalName}::${String(id).slice(oldName.length + 2)}` : id);
+      ["point", "line", "polygon"].forEach((key) => {
+        if (state.featureTargets[key] === oldName) state.featureTargets[key] = finalName;
+      });
+      try {
+        localStorage.setItem("mapdash-feature-targets", JSON.stringify(state.featureTargets));
+      } catch (_) {
+      }
+      return finalName;
+    }
+
+    function deleteGroup(groupName) {
+      clearSelectionForGroup(groupName, { silent: true });
+      removeServerLayer(groupName);
+      layersInScope(groupName, { editableOnly: true }).forEach((layer) => {
+        state.drawn.removeLayer(layer);
+        delete state.layerMeta[layerKey(layer)];
+      });
+      delete state.datasetMeta[groupName];
+      state.groups = state.groups.filter((group) => group !== groupName);
+      ensureFeatureTargetDefaults();
+      try {
+        localStorage.setItem("mapdash-feature-targets", JSON.stringify(state.featureTargets));
+      } catch (_) {
+      }
+    }
+
+    function groupFeatureCollection(groupName) {
+      return {
+        type: "FeatureCollection",
+        features: layersInGroup(groupName)
+          .map((layer) => layerToFeature(layer, { includeInternal: false }))
+          .filter(Boolean)
+      };
+    }
+
+    function exportGroup(groupName, format) {
+      if (isServerBackedGroup(groupName)) {
+        modalInfo("Export Layer", "Server-backed live layers are not exported. Import as editable copy if you need export files.");
+        return;
+      }
+      const layers = layersInGroup(groupName);
+      if (!layers.length) {
+        modalInfo("Export Layer", "This layer has no features to export.");
+        return;
+      }
+
+      const safe = groupName.replace(/[^a-z0-9-_]+/gi, "_").toLowerCase();
+      const collection = groupFeatureCollection(groupName);
+
+      if (format === "geojson") {
+        downloadFile(`${safe}.geojson`, "application/geo+json", JSON.stringify(collection, null, 2));
+        toast(`Exported ${groupName} as GeoJSON`);
+        return;
+      }
+
+      if (format === "kml") {
+        const body = collection.features.map((feature, index) => featureToKml(feature, (feature.properties && feature.properties.name) || `${groupName} ${index + 1}`)).join("");
+        if (!body) {
+          modalInfo("KML Export", "This geometry type is not supported for KML export.");
+          return;
+        }
+        const kml = `<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document>${body}</Document></kml>`;
+        downloadFile(`${safe}.kml`, "application/vnd.google-earth.kml+xml", kml);
+        toast(`Exported ${groupName} as KML`);
+        return;
+      }
+
+      const userFields = publicPropertyKeys(layers);
+      const rows = [["name", "layer", "type", "lat", "lng"].concat(userFields)];
+      layers.forEach((layer) => {
+        const meta = getLayerMeta(layer) || { name: "Feature", group: groupName, kind: layerTypeName(layer) };
+        let lat = "";
+        let lng = "";
+        if (layer.getLatLng) {
+          const ll = layer.getLatLng();
+          lat = ll.lat;
+          lng = ll.lng;
+        } else if (layer.getBounds) {
+          const c = layer.getBounds().getCenter();
+          lat = c.lat;
+          lng = c.lng;
+        }
+        rows.push([meta.name, meta.group, meta.kind, lat, lng].concat(userFields.map((field) => layerAttributeValue(layer, field))));
+      });
+      const csv = rows.map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(",")).join("\n");
+      downloadFile(`${safe}.csv`, "text/csv", csv);
+      toast(`Exported ${groupName} as CSV`);
+    }
+
+    async function exportGroupPrompt(groupName) {
+      const data = await modalForm(
+        "Export Layer",
+        `<p class="modal-text">Export <b>${escapeHtml(groupName)}</b> as:</p>
+         <select id="layerExportFmt" class="field">
+           <option value="geojson">GeoJSON</option>
+           <option value="kml">KML</option>
+           <option value="csv">CSV</option>
+         </select>`,
+        () => ({ format: document.getElementById("layerExportFmt").value })
+      );
+      if (!data) return;
+      exportGroup(groupName, data.format);
+    }
+
+    async function editGroupSymbology(groupName) {
+      const layers = layersInGroup(groupName);
+      if (!layers.length && !isServerBackedGroup(groupName)) {
+        await modalInfo("Symbology", "Add at least one feature to this layer before editing its symbology.");
+        return;
+      }
+
+      const sampleLayer = layers[0] || null;
+      const datasetMeta = getDatasetMeta(groupName) || {};
+      const sampleMeta = sampleLayer ? getLayerMeta(sampleLayer) : null;
+      const fallbackBucket = inferGroupGeometryType(groupName);
+      const fallbackKind = fallbackBucket === "point" ? "marker" : (fallbackBucket === "line" ? "line" : "polygon");
+      const kind = sampleLayer ? styleKindForLayer(sampleLayer) : fallbackKind;
+      if (!["marker", "line", "polygon", "circle", "circle-marker"].includes(kind)) {
+        await modalInfo("Symbology", "Symbology editing is available for vector layers and point features.");
+        return;
+      }
+
+      const style = {
+        ...(sampleLayer ? readLayerStyle(sampleLayer) : defaultStyleForBucket(fallbackBucket || "polygon")),
+        ...(sampleMeta && sampleMeta.style ? sampleMeta.style : {}),
+        ...(datasetMeta.style || {})
+      };
+
+      const html = kind === "marker"
+        ? `
+          <div class="symbology-preview"><div class="symbology-preview-swatch" style="background:${escapeHtml(style.color)};color:#071218;border:2px solid ${escapeHtml(style.strokeColor || "#072018")}">Marker</div></div>
+          <div class="row">
+            <input id="symColor" class="field" type="color" value="${escapeHtml(style.color)}" />
+            <input id="symStrokeColor" class="field" type="color" value="${escapeHtml(style.strokeColor || "#072018")}" />
+          </div>
+          <div class="row">
+            <input id="symSize" class="field" type="number" min="16" max="64" value="${escapeHtml(style.size || 28)}" />
+            <select id="symMarkerShape" class="field">
+              <option value="pin" ${style.markerShape !== "dot" ? "selected" : ""}>Pin</option>
+              <option value="dot" ${style.markerShape === "dot" ? "selected" : ""}>Dot</option>
+            </select>
+          </div>
+          <input id="symOpacity" class="field" type="number" min="0.1" max="1" step="0.05" value="${escapeHtml(style.opacity || 1)}" />
+        `
+        : kind === "line"
+          ? `
+            <div class="symbology-preview"><div class="symbology-preview-swatch" style="background:rgba(0,0,0,0);color:#dceaf0;border:${Math.max(2, Number(style.weight) || 2)}px solid ${escapeHtml(style.color)}">${escapeHtml(groupName)}</div></div>
+            <div class="row">
+              <input id="symColor" class="field" type="color" value="${escapeHtml(style.color)}" />
+              <input id="symWeight" class="field" type="number" min="1" max="16" value="${escapeHtml(style.weight || 2)}" />
+            </div>
+            <div class="row">
+              <input id="symOpacity" class="field" type="number" min="0.05" max="1" step="0.05" value="${escapeHtml(style.opacity || 1)}" />
+              <input id="symDash" class="field" placeholder="Dash array e.g. 8,6" value="${escapeHtml(style.dashArray || "")}" />
+            </div>
+          `
+        : `
+          <div class="symbology-preview"><div class="symbology-preview-swatch" style="background:${escapeHtml(style.fillColor || style.color)};color:#071218;border:${Math.max(2, Number(style.weight) || 2)}px solid ${escapeHtml(style.color)}">${escapeHtml(groupName)}</div></div>
+          <div class="row">
+            <input id="symColor" class="field" type="color" value="${escapeHtml(style.color)}" />
+            <input id="symFillColor" class="field" type="color" value="${escapeHtml(style.fillColor || style.color)}" />
+          </div>
+          <div class="row">
+            <input id="symWeight" class="field" type="number" min="1" max="16" value="${escapeHtml(style.weight || 2)}" />
+            <input id="symOpacity" class="field" type="number" min="0.05" max="1" step="0.05" value="${escapeHtml(style.opacity || 1)}" />
+          </div>
+          <div class="row">
+            <input id="symFillOpacity" class="field" type="number" min="0" max="1" step="0.05" value="${escapeHtml(style.fillOpacity ?? 0.2)}" />
+            <input id="symDash" class="field" placeholder="Dash array e.g. 8,6" value="${escapeHtml(style.dashArray || "")}" />
+          </div>
+          ${kind === "circle-marker" ? `<input id="symRadius" class="field" type="number" min="2" max="40" value="${escapeHtml(style.radius || 8)}" />` : ""}
+        `;
+
+      modalOpen(
+        `Symbology: ${groupName}`,
+        html,
+        [
+          { label: "Close", onClick: modalClose },
+          {
+            label: "Apply",
+            variant: "brand",
+            onClick: () => {
+              const nextStyle = kind === "marker"
+                ? {
+                    markerShape: document.getElementById("symMarkerShape").value,
+                    color: document.getElementById("symColor").value,
+                    strokeColor: document.getElementById("symStrokeColor").value,
+                    size: Number(document.getElementById("symSize").value),
+                    opacity: Number(document.getElementById("symOpacity").value)
+                  }
+                : kind === "line"
+                  ? {
+                      color: document.getElementById("symColor").value,
+                      weight: Number(document.getElementById("symWeight").value),
+                      opacity: Number(document.getElementById("symOpacity").value),
+                      dashArray: document.getElementById("symDash").value.trim()
+                    }
+                : {
+                    color: document.getElementById("symColor").value,
+                    fillColor: document.getElementById("symFillColor").value,
+                    weight: Number(document.getElementById("symWeight").value),
+                    opacity: Number(document.getElementById("symOpacity").value),
+                    fillOpacity: Number(document.getElementById("symFillOpacity").value),
+                    dashArray: document.getElementById("symDash").value.trim()
+                  };
+              if (kind === "circle-marker") nextStyle.radius = Number(document.getElementById("symRadius").value);
+              ensureGroupExists(groupName, inferGroupGeometryType(groupName));
+              state.datasetMeta[groupName].style = cloneJson(nextStyle);
+              layers.forEach((layer) => applyLayerSymbology(layer, nextStyle));
+              modalClose();
+              snapshot();
+              refreshLayers();
+              toast("Layer symbology updated");
+            }
+          }
+        ]
+      );
+    }
+
+    async function editGroupLabels(groupName) {
+      const layers = layersInGroup(groupName);
+      if (!layers.length && !isServerBackedGroup(groupName)) {
+        await modalInfo("Labels", "Add at least one feature to this layer before configuring labels.");
+        return;
+      }
+
+      ensureGroupExists(groupName, inferGroupGeometryType(groupName));
+      const datasetMeta = getDatasetMeta(groupName) || {};
+      const current = datasetMeta.label || {};
+      const fields = labelFieldsForGroup(groupName);
+      const options = [`<option value="" ${!current.field ? "selected" : ""}>No Labels</option>`]
+        .concat(fields.map((field) => `<option value="${escapeHtml(field)}" ${field === current.field ? "selected" : ""}>${escapeHtml(field)}</option>`))
+        .join("");
+
+      const data = await modalForm(
+        `Labels: ${groupName}`,
+        `
+          <select id="labelField" class="field">${options}</select>
+          <div class="row">
+            <input id="labelColor" class="field" type="color" value="${escapeHtml(current.color || "#eef5f8")}" />
+            <input id="labelSize" class="field" type="number" min="10" max="28" value="${escapeHtml(current.size || 12)}" />
+          </div>
+        `,
+        () => ({
+          field: document.getElementById("labelField").value,
+          color: document.getElementById("labelColor").value,
+          size: Number(document.getElementById("labelSize").value)
+        })
+      );
+      if (!data) return;
+
+      if (!data.field) {
+        delete state.datasetMeta[groupName].label;
+      } else {
+        state.datasetMeta[groupName].label = {
+          field: data.field,
+          color: data.color,
+          size: Number.isFinite(data.size) ? data.size : 12,
+          halo: "rgba(7, 16, 23, 0.92)",
+          permanent: true
+        };
+      }
+
+      applyGroupLabeling(groupName);
+      snapshot();
+      refreshLayers();
+      toast(data.field ? `Labels enabled: ${data.field}` : "Labels cleared");
+    }
+
     function renderLayerList(container) {
       if (!container) return;
       container.innerHTML = "";
-      const layers = state.drawn.getLayers();
-      const grouped = {};
-
-      layers.forEach((layer) => {
+      ensureFeatureTargetDefaults();
+      editableFeatureLayers().forEach((layer) => {
         const id = layerKey(layer);
         if (!state.layerMeta[id]) registerLayer(layer);
-        const group = state.layerMeta[id].group || "Default";
-        if (!grouped[group]) grouped[group] = [];
-        grouped[group].push(layer);
       });
 
-      const groupNames = Object.keys(grouped).sort((a, b) => a.localeCompare(b));
+      const bucketGroups = {};
+      state.groups
+        .slice()
+        .sort((a, b) => a.localeCompare(b))
+        .forEach((groupName) => {
+          const bucket = inferGroupGeometryType(groupName) || "other";
+          if (!bucketGroups[bucket]) bucketGroups[bucket] = [];
+          bucketGroups[bucket].push(groupName);
+        });
 
-      groupNames.forEach((groupName) => {
+      ["point", "line", "polygon", "other"].forEach((bucket) => {
+        const groupNames = bucketGroups[bucket];
+        if (!groupNames || !groupNames.length) return;
         const title = document.createElement("div");
         title.className = "group-title";
-        title.textContent = groupName;
+        title.textContent = bucket === "other" ? "Other Layers" : `${datasetGeometryLabel(bucket)}s`;
         container.appendChild(title);
 
-        grouped[groupName].forEach((layer) => {
-          const id = layerKey(layer);
-          const meta = state.layerMeta[id];
-
+        groupNames.forEach((groupName) => {
+          ensureGroupExists(groupName, inferGroupGeometryType(groupName));
+          const groupMeta = getDatasetMeta(groupName) || {};
+          const layers = layersInGroup(groupName);
           const card = document.createElement("div");
           card.className = "layer-card";
 
@@ -2694,20 +4396,20 @@
 
           const check = document.createElement("input");
           check.type = "checkbox";
-          check.checked = meta.visible !== false && state.map.hasLayer(layer);
+          check.checked = groupMeta.visible !== false;
           check.addEventListener("change", () => {
-            applyLayerVisibility(layer, check.checked);
+            setGroupVisibility(groupName, check.checked);
             snapshot();
           });
 
           const name = document.createElement("div");
           name.className = "layer-name";
-          name.textContent = meta.name;
+          name.textContent = groupName;
           name.title = "Rename layer";
           name.addEventListener("click", async () => {
-            const value = await modalPrompt("Rename Layer", "Layer name", "Type new name", meta.name);
+            const value = await modalPrompt("Rename Layer", "Layer name", "Type new name", groupName);
             if (value) {
-              meta.name = safeName(value, meta.name);
+              renameGroup(groupName, value);
               snapshot();
               refreshLayers();
             }
@@ -2716,46 +4418,34 @@
           const zoomBtn = document.createElement("button");
           zoomBtn.className = "icon-btn";
           zoomBtn.innerHTML = "<i class='fa-solid fa-location-dot'></i>";
-          zoomBtn.addEventListener("click", () => zoomTo(layer));
+          zoomBtn.title = "Zoom to layer";
+          zoomBtn.addEventListener("click", () => zoomToGroup(groupName));
 
           const attrBtn = document.createElement("button");
           attrBtn.className = "icon-btn";
           attrBtn.innerHTML = "<i class='fa-solid fa-table-list'></i>";
           attrBtn.title = "Open attribute table";
-          attrBtn.addEventListener("click", () => openAttributeTable(meta.group || "all"));
+          attrBtn.addEventListener("click", () => openAttributeTable(groupName));
 
           const styleBtn = document.createElement("button");
           styleBtn.className = "icon-btn";
           styleBtn.innerHTML = "<i class='fa-solid fa-palette'></i>";
           styleBtn.title = "Edit symbology";
-          styleBtn.addEventListener("click", () => editLayerSymbology(layer));
+          styleBtn.addEventListener("click", () => editGroupSymbology(groupName));
 
-          const groupBtn = document.createElement("button");
-          groupBtn.className = "icon-btn";
-          groupBtn.innerHTML = "<i class='fa-regular fa-folder-open'></i>";
-          groupBtn.addEventListener("click", async () => {
-            const options = state.groups.map((g) => `<option value=\"${g}\" ${g === meta.group ? "selected" : ""}>${g}</option>`).join("");
-            const data = await modalForm(
-              "Move Layer to Group",
-              `<select id=\"groupPicker\" class=\"field\">${options}</select>`,
-              () => ({ group: document.getElementById("groupPicker").value })
-            );
-            if (data && data.group) {
-              meta.group = ensureGroupExists(data.group);
-              snapshot();
-              refreshLayers();
-            }
-          });
+          const labelBtn = document.createElement("button");
+          labelBtn.className = "icon-btn";
+          labelBtn.innerHTML = "<i class='fa-solid fa-tag'></i>";
+          labelBtn.title = "Configure labels";
+          labelBtn.addEventListener("click", () => editGroupLabels(groupName));
 
           const delBtn = document.createElement("button");
           delBtn.className = "icon-btn";
           delBtn.innerHTML = "<i class='fa-solid fa-trash'></i>";
           delBtn.addEventListener("click", async () => {
-            const ok = await modalConfirm("Delete Layer", "Remove this layer permanently?", "Delete");
+            const ok = await modalConfirm("Delete Layer", `Remove layer <b>${escapeHtml(groupName)}</b> and all of its features?`, "Delete");
             if (!ok) return;
-            layer.removeFrom(state.map);
-            state.drawn.removeLayer(layer);
-            delete state.layerMeta[id];
+            deleteGroup(groupName);
             snapshot();
             refreshLayers();
             updateStatus();
@@ -2764,23 +4454,28 @@
           const exportBtn = document.createElement("button");
           exportBtn.className = "icon-btn";
           exportBtn.innerHTML = "<i class='fa-solid fa-file-export'></i>";
-          exportBtn.addEventListener("click", () => exportLayerPrompt(layer, meta));
+          exportBtn.title = "Export layer";
+          exportBtn.addEventListener("click", () => exportGroupPrompt(groupName));
 
-          top.append(check, name, zoomBtn, attrBtn, styleBtn, groupBtn, exportBtn, delBtn);
+          top.append(check, name, zoomBtn, attrBtn, styleBtn, labelBtn, exportBtn, delBtn);
 
           const op = document.createElement("input");
           op.type = "range";
           op.min = "0";
           op.max = "1";
           op.step = "0.05";
-          op.value = String(meta.opacity ?? 1);
-          op.addEventListener("input", () => setLayerOpacity(layer, Number(op.value)));
+          op.value = String(groupMeta.opacity ?? 1);
+          op.addEventListener("input", () => setGroupOpacity(groupName, Number(op.value)));
 
           const metaRow = document.createElement("div");
           metaRow.className = "layer-meta";
-          const added = meta.addedAt ? new Date(meta.addedAt) : null;
+          const added = groupMeta.addedAt ? new Date(groupMeta.addedAt) : null;
           const addedText = added && !Number.isNaN(added.getTime()) ? added.toLocaleString() : "unknown";
-          metaRow.innerHTML = `<span>${meta.kind || "Layer"}</span><span>Added: ${addedText}</span>`;
+          const liveStats = groupMeta.liveStats || {};
+          const countText = isServerBackedGroup(groupName)
+            ? `${liveStats.loadedCount || 0} loaded${Number.isFinite(liveStats.visibleCount) ? ` / ${liveStats.visibleCount} in view` : ""}${Number.isFinite(liveStats.totalCount) ? ` / ${liveStats.totalCount} total` : ""} • ${liveLayerFetchModeLabel(liveStats.fetchMode || liveLayerFetchMode(groupName))}${liveStats.truncated ? " • capped" : ""}`
+            : `${layers.length} feature${layers.length === 1 ? "" : "s"}`;
+          metaRow.innerHTML = `<span>${datasetGeometryLabel(bucket)} • ${countText}</span><span>Added: ${addedText}</span>`;
 
           card.append(top, metaRow, op);
           container.appendChild(card);
@@ -2792,8 +4487,20 @@
       renderLayerList(ui.layers);
       renderLayerList(ui.layerDrawerList);
       refreshTargetOptions();
+      state.groups.forEach((groupName) => applyGroupLabeling(groupName));
 
       updateStatus();
+    }
+
+    function cancelSketchTool() {
+      state.toolState = null;
+      state.toolPoints = [];
+      if (state.map && state.map.pm) {
+        state.map.pm.disableDraw();
+        state.map.pm.disableGlobalEditMode();
+        state.map.pm.disableGlobalDragMode();
+      }
+      if (state.map) state.map.getContainer().style.cursor = "";
     }
 
     function mapPointClickHandler(e) {
@@ -2841,6 +4548,7 @@
     }
 
     function startCustomTool(type, message) {
+      stopSelectionTool({ silent: true });
       state.toolState = type;
       state.toolPoints = [];
       state.map.pm.disableGlobalEditMode();
@@ -2930,7 +4638,7 @@
 
     function createHull() {
       const pts = [];
-      state.drawn.eachLayer((layer) => {
+      featureLayers().forEach((layer) => {
         if (layer instanceof L.Marker) {
           const ll = layer.getLatLng();
           pts.push(turf.point([ll.lng, ll.lat]));
@@ -2992,7 +4700,7 @@
     function generateHeat() {
       if (state.heatLayer) state.map.removeLayer(state.heatLayer);
       const points = [];
-      state.drawn.eachLayer((layer) => {
+      featureLayers().forEach((layer) => {
         if (layer instanceof L.Marker) {
           const ll = layer.getLatLng();
           points.push([ll.lat, ll.lng, 0.9]);
@@ -3051,6 +4759,8 @@
     function toggleMeasure() {
       state.measureMode = !state.measureMode;
       if (state.measureMode) {
+        cancelSketchTool();
+        stopSelectionTool({ silent: true });
         state.measureLine = L.polyline([], { color: "#ffd17e", weight: 4, dashArray: "8,6" }).addTo(state.map);
         state.map.getContainer().style.cursor = "crosshair";
         state.map.on("click", measureClick);
@@ -3153,7 +4863,7 @@
       let areaKm2 = 0;
       let lineKm = 0;
 
-      state.drawn.eachLayer((layer) => {
+      featureLayers().forEach((layer) => {
         if (!layer.toGeoJSON) return;
         const geo = layer.toGeoJSON();
         const type = geo.geometry && geo.geometry.type;
@@ -3164,13 +4874,13 @@
 
       modalInfo(
         "Distance and Area",
-        `Features: ${state.drawn.getLayers().length}<br>Total polygon area: <b>${areaKm2.toFixed(2)} km2</b><br>Total line distance: <b>${lineKm.toFixed(2)} km</b>`
+        `Features: ${featureLayers().length}<br>Total polygon area: <b>${areaKm2.toFixed(2)} km2</b><br>Total line distance: <b>${lineKm.toFixed(2)} km</b>`
       );
     }
 
     function addCentroids() {
       const newLayers = [];
-      state.drawn.eachLayer((layer) => {
+      featureLayers().forEach((layer) => {
         if (!layer.toGeoJSON) return;
         const geo = layer.toGeoJSON();
         const type = geo.geometry && geo.geometry.type;
@@ -3202,7 +4912,7 @@
 
     function addVoronoi() {
       const points = [];
-      state.drawn.eachLayer((layer) => {
+      featureLayers().forEach((layer) => {
         if (layer instanceof L.Marker) {
           const ll = layer.getLatLng();
           points.push(turf.point([ll.lng, ll.lat]));
@@ -3244,7 +4954,7 @@
         const center = turf.point([e.latlng.lng, e.latlng.lat]);
         let count = 0;
 
-        state.drawn.eachLayer((layer) => {
+        featureLayers().forEach((layer) => {
           if (!(layer instanceof L.Marker)) return;
           const ll = layer.getLatLng();
           const dist = turf.distance(center, turf.point([ll.lng, ll.lat]), { units: "miles" });
@@ -3298,7 +5008,6 @@
     }
 
     function runBuffer() {
-      state.drawn.toGeoJSON();
       modalPrompt("Buffer Analysis", "Buffer distance (miles)", "e.g. 1", "1").then((raw) => {
         const miles = Number(raw);
         if (!Number.isFinite(miles) || miles <= 0) {
@@ -3306,7 +5015,7 @@
           return;
         }
 
-        const all = state.drawn.toGeoJSON();
+        const all = geoFeatures({ includeServer: true });
         if (!all.features.length) {
           modalInfo("No Features", "Draw or import data before running buffer.");
           return;
@@ -3333,7 +5042,7 @@
     }
 
     function polygonLayers() {
-      return state.drawn.getLayers().filter((layer) => {
+      return featureLayers().filter((layer) => {
         if (!layer.toGeoJSON) return false;
         const type = layer.toGeoJSON().geometry && layer.toGeoJSON().geometry.type;
         return type === "Polygon" || type === "MultiPolygon";
@@ -3341,11 +5050,50 @@
     }
 
     function lineLayers() {
-      return state.drawn.getLayers().filter((layer) => {
+      return featureLayers().filter((layer) => {
         if (!layer.toGeoJSON) return false;
         const type = layer.toGeoJSON().geometry && layer.toGeoJSON().geometry.type;
         return type === "LineString" || type === "MultiLineString";
       });
+    }
+
+    function importBaseName(fileName) {
+      return safeName(String(fileName || "").replace(/\.[^.]+$/, ""), "Imported Layer");
+    }
+
+    function groupNameFromBase(baseName, bucket, splitByBucket = false) {
+      return safeName(splitByBucket ? `${baseName} ${defaultGroupNameForBucket(bucket)}` : baseName, baseName);
+    }
+
+    function registerLayersAsDataset(layers, baseName, options = {}) {
+      const bucketMap = new Map();
+      layers.filter((layer) => isFeatureLayer(layer)).forEach((layer) => {
+        const bucket = options.bucket || layerBucket(layer) || "point";
+        if (!bucketMap.has(bucket)) bucketMap.set(bucket, []);
+        bucketMap.get(bucket).push(layer);
+      });
+
+      const multiBucket = bucketMap.size > 1;
+      let count = 0;
+      bucketMap.forEach((bucketLayers, bucket) => {
+        const requestedName = options.groupNames && options.groupNames[bucket]
+          ? options.groupNames[bucket]
+          : options.group || uniqueGroupName(groupNameFromBase(baseName, bucket, multiBucket || options.forceBucketSuffix));
+        ensureGroupExists(requestedName, bucket, { style: options.style || readLayerStyle(bucketLayers[0]) });
+        if (options.source) state.datasetMeta[requestedName].source = cloneJson(options.source);
+        bucketLayers.forEach((layer) => {
+          state.drawn.addLayer(layer);
+          registerLayer(
+            layer,
+            (layer.feature && layer.feature.properties && (layer.feature.properties.name || layer.feature.properties.Name || layer.feature.properties.title)) || options.featureName || baseName,
+            { group: requestedName }
+          );
+          if (options.style) applyLayerSymbology(layer, options.style);
+          count += 1;
+        });
+      });
+
+      return count;
     }
 
     function addGeoFeatureResult(feature, name, style = { color: "#44d2a8", fillOpacity: 0.2, weight: 2 }) {
@@ -3357,11 +5105,7 @@
         style,
         pointToLayer: (_, latlng) => L.circleMarker(latlng, { radius: style.radius || 7 })
       });
-      layer.eachLayer((l) => {
-        state.drawn.addLayer(l);
-        registerLayer(l, (l.feature && l.feature.properties && l.feature.properties.name) || name);
-        applyLayerSymbology(l, style);
-      });
+      registerLayersAsDataset(layer.getLayers(), uniqueGroupName(name), { style });
       snapshot();
       refreshLayers();
       toast(`${name} created`);
@@ -3440,7 +5184,7 @@
       const tolerance = Number(toleranceRaw);
       if (!Number.isFinite(tolerance) || tolerance <= 0) return;
       try {
-        const simplified = turf.simplify(geoFeatures(), { tolerance, highQuality: true, mutate: false });
+        const simplified = turf.simplify(geoFeatures({ includeServer: true }), { tolerance, highQuality: true, mutate: false });
         addGeoFeatureResult(simplified, "Simplified", { color: "#91b9ff", fillOpacity: 0.14, weight: 2 });
       } catch (err) {
         console.error(err);
@@ -3450,7 +5194,7 @@
 
     async function gpConcave() {
       const pts = [];
-      state.drawn.eachLayer((layer) => {
+      featureLayers().forEach((layer) => {
         if (layer instanceof L.Marker) {
           const ll = layer.getLatLng();
           pts.push(turf.point([ll.lng, ll.lat]));
@@ -3497,7 +5241,7 @@
       const bearing = Number(bearingRaw);
       if (!Number.isFinite(dist) || !Number.isFinite(bearing) || dist <= 0) return;
       try {
-        const result = turf.transformTranslate(geoFeatures(), dist, bearing, { units: "miles" });
+        const result = turf.transformTranslate(geoFeatures({ includeServer: true }), dist, bearing, { units: "miles" });
         addGeoFeatureResult(result, "Translated", { color: "#92c4ff", fillOpacity: 0.14, weight: 2 });
       } catch (err) {
         console.error(err);
@@ -3512,7 +5256,7 @@
       try {
         const center = state.map.getCenter();
         const pivot = [center.lng, center.lat];
-        const result = turf.transformRotate(geoFeatures(), angle, { pivot, mutate: false });
+        const result = turf.transformRotate(geoFeatures({ includeServer: true }), angle, { pivot, mutate: false });
         addGeoFeatureResult(result, "Rotated", { color: "#d0a6ff", fillOpacity: 0.14, weight: 2 });
       } catch (err) {
         console.error(err);
@@ -3527,7 +5271,7 @@
       try {
         const center = state.map.getCenter();
         const origin = [center.lng, center.lat];
-        const result = turf.transformScale(geoFeatures(), factor, { origin, mutate: false });
+        const result = turf.transformScale(geoFeatures({ includeServer: true }), factor, { origin, mutate: false });
         addGeoFeatureResult(result, "Scaled", { color: "#a2f2d6", fillOpacity: 0.14, weight: 2 });
       } catch (err) {
         console.error(err);
@@ -3705,10 +5449,13 @@
     }
 
     function geoFeatures(options = {}) {
-      const config = { includeInternal: false, includeMeta: true, ...options };
+      const config = { includeInternal: false, includeMeta: true, includeServer: false, scope: null, ...options };
+      const sourceLayers = config.scope
+        ? layersInScope(config.scope, { editableOnly: !config.includeServer })
+        : (config.includeServer ? featureLayers() : editableFeatureLayers());
       return {
         type: "FeatureCollection",
-        features: state.drawn.getLayers()
+        features: sourceLayers
           .map((layer) => layerToFeature(layer, config))
           .filter(Boolean)
       };
@@ -3731,9 +5478,9 @@
     }
 
     function exportCSV() {
-      const featureLayers = layersInScope("all");
+      const featureLayers = layersInScope("all", { editableOnly: true });
       const userFields = publicPropertyKeys(featureLayers);
-      const rows = [["name", "group", "type", "lat", "lng"].concat(userFields)];
+      const rows = [["name", "layer", "type", "lat", "lng"].concat(userFields)];
       featureLayers.forEach((layer) => {
         const meta = getLayerMeta(layer) || { name: "Layer", group: "Default", kind: "Unknown" };
         let lat = "";
@@ -3844,7 +5591,9 @@
         n: state.projectName,
         g: geoFeatures({ includeInternal: true }),
         m: cloneJson(state.layerMeta),
-        r: state.groups.slice()
+        r: state.groups.slice(),
+        d: cloneJson(state.datasetMeta),
+        t: cloneJson(state.featureTargets)
       };
       const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(data))));
       const url = `${location.origin}${location.pathname}#state=${encoded}`;
@@ -3861,8 +5610,10 @@
 
         state.projectName = payload.n || "shared-map";
         ui.projectTag.textContent = `project: ${state.projectName}`;
-        state.groups = payload.r && payload.r.length ? payload.r.slice() : ["Default"];
-        loadGeoFeatures(payload.g, payload.m || {});
+        state.groups = payload.r && payload.r.length ? payload.r.slice() : [];
+        state.datasetMeta = payload.d && typeof payload.d === "object" ? cloneJson(payload.d) : {};
+        state.featureTargets = payload.t && typeof payload.t === "object" ? { ...state.featureTargets, ...payload.t } : state.featureTargets;
+        loadGeoFeatures(payload.g, payload.m || {}, state.datasetMeta);
         state.map.setView(payload.c || [20, 0], payload.z || 2);
         snapshot();
         refreshLayers();
@@ -3882,6 +5633,8 @@
         geo: geoFeatures({ includeInternal: true }),
         meta: cloneJson(state.layerMeta),
         groups: state.groups.slice(),
+        datasetMeta: cloneJson(state.datasetMeta),
+        featureTargets: cloneJson(state.featureTargets),
         featureSeq: state.featureSeq
       };
 
@@ -3912,9 +5665,11 @@
 
       state.projectName = proj.name;
       ui.projectTag.textContent = `project: ${state.projectName}`;
-      state.groups = proj.groups && proj.groups.length ? proj.groups : ["Default"];
+      state.groups = proj.groups && proj.groups.length ? proj.groups : [];
+      state.datasetMeta = proj.datasetMeta && typeof proj.datasetMeta === "object" ? cloneJson(proj.datasetMeta) : {};
+      state.featureTargets = proj.featureTargets && typeof proj.featureTargets === "object" ? { ...state.featureTargets, ...proj.featureTargets } : state.featureTargets;
       state.featureSeq = Number.isFinite(proj.featureSeq) ? proj.featureSeq : state.featureSeq;
-      loadGeoFeatures(proj.geo, proj.meta || {});
+      loadGeoFeatures(proj.geo, proj.meta || {}, state.datasetMeta);
       state.map.setView([proj.center.lat, proj.center.lng], proj.zoom || 2);
       snapshot();
       refreshLayers();
@@ -3923,19 +5678,24 @@
 
     async function newProject() {
       let canCreate = true;
-      if (state.drawn.getLayers().length) canCreate = await modalConfirm("Start New Project", "Clear current map and start fresh?", "Start New");
+      if (state.drawn.getLayers().length || Object.keys(state.serverLayers).length || state.groups.length) canCreate = await modalConfirm("Start New Project", "Clear current map and start fresh?", "Start New");
       if (!canCreate) return;
 
+      clearSelection({ silent: true });
+      stopSelectionTool({ silent: true });
       const name = await modalPrompt("Project Name", "Enter project name", "mapdash-enterprise", `mapdash-${new Date().toISOString().slice(0, 10)}`);
       state.projectName = safeName(name, "untitled");
       ui.projectTag.textContent = `project: ${state.projectName}`;
-      state.groups = ["Default"];
+      state.groups = [];
+      clearServerLayers();
       state.drawn.clearLayers();
       state.layerMeta = {};
+      state.datasetMeta = {};
       state.history = [];
       state.redo = [];
       state.featureSeq = 0;
       state.map.setView([20, 0], 2);
+      ensureFeatureTargetDefaults();
       snapshot();
       refreshLayers();
       toast("New project ready");
@@ -3944,30 +5704,375 @@
     async function clearMap() {
       const ok = await modalConfirm("Clear Map", "Remove all features and overlays from map?", "Clear");
       if (!ok) return;
+      clearSelection({ silent: true });
+      stopSelectionTool({ silent: true });
+      clearServerLayers();
       state.drawn.clearLayers();
       state.layerMeta = {};
+      state.groups = [];
+      state.datasetMeta = {};
       if (state.heatLayer) {
         state.map.removeLayer(state.heatLayer);
         state.heatLayer = null;
       }
+      ensureFeatureTargetDefaults();
       snapshot();
       refreshLayers();
       toast("Map cleared");
     }
 
+    function chunkArray(values, size) {
+      const rows = [];
+      for (let index = 0; index < values.length; index += size) rows.push(values.slice(index, index + size));
+      return rows;
+    }
+
+    async function fetchArcGisJson(url) {
+      const data = await fetchJson(appendQueryParams(url, { f: "json" }));
+      if (data && data.error) throw new Error(data.error.message || "ArcGIS request failed");
+      return data;
+    }
+
+    async function fetchArcGisLayerGeoJson(layerUrl, options = {}) {
+      const info = options.info || await fetchArcGisJson(layerUrl);
+      const where = options.where || "1=1";
+      const maxFeatures = Number.isFinite(options.maxFeatures) && options.maxFeatures > 0 ? options.maxFeatures : Infinity;
+      const queryUrl = appendUrlPath(layerUrl, "query");
+      const spatialQuery = options.geometry ? {
+        geometry: options.geometry,
+        geometryType: options.geometryType || "esriGeometryEnvelope",
+        inSR: options.inSR || "4326",
+        spatialRel: options.spatialRel || "esriSpatialRelIntersects"
+      } : {};
+
+      const idsData = await fetchJson(appendQueryParams(queryUrl, {
+        where,
+        returnIdsOnly: "true",
+        f: "json",
+        ...spatialQuery
+      }));
+      if (idsData && idsData.error) throw new Error(idsData.error.message || "ArcGIS ID query failed");
+
+      const objectIds = Array.isArray(idsData && idsData.objectIds) ? idsData.objectIds.slice().sort((a, b) => a - b) : [];
+      if (objectIds.length) {
+        const limitedIds = maxFeatures === Infinity ? objectIds : objectIds.slice(0, maxFeatures);
+        if (!limitedIds.length) return { type: "FeatureCollection", features: [] };
+
+        const batchSize = 150;
+        const collections = [];
+
+        for (const ids of chunkArray(limitedIds, batchSize)) {
+          const page = await fetchJson(appendQueryParams(queryUrl, {
+            objectIds: ids.join(","),
+            outFields: "*",
+            returnGeometry: "true",
+            outSR: "4326",
+            f: "geojson",
+            ...spatialQuery
+          }));
+          if (page && page.error) throw new Error(page.error.message || "ArcGIS feature query failed");
+          if (!page || page.type !== "FeatureCollection") throw new Error("ArcGIS layer did not return GeoJSON features.");
+          collections.push(page);
+        }
+
+        return mergeFeatureCollections(collections);
+      }
+
+      const countData = await fetchJson(appendQueryParams(queryUrl, {
+        where,
+        returnCountOnly: "true",
+        f: "json",
+        ...spatialQuery
+      }));
+      if (countData && countData.error) throw new Error(countData.error.message || "ArcGIS count query failed");
+
+      const total = Number(countData && countData.count) || 0;
+      if (!total) return { type: "FeatureCollection", features: [] };
+
+      const collections = [];
+      const pageSize = Math.max(1, Math.min(Number(info.maxRecordCount) || 1000, maxFeatures === Infinity ? Number(info.maxRecordCount) || 1000 : maxFeatures));
+      let offset = 0;
+      let loaded = 0;
+
+      while (offset < total && loaded < maxFeatures) {
+        const remaining = maxFeatures === Infinity ? pageSize : Math.min(pageSize, maxFeatures - loaded);
+        const page = await fetchJson(appendQueryParams(queryUrl, {
+          where,
+          outFields: "*",
+          returnGeometry: "true",
+          outSR: "4326",
+          f: "geojson",
+          resultOffset: offset,
+          resultRecordCount: remaining,
+          ...spatialQuery
+        }));
+        if (page && page.error) throw new Error(page.error.message || "ArcGIS paged query failed");
+        if (!page || page.type !== "FeatureCollection") throw new Error("ArcGIS layer did not return GeoJSON features.");
+        const count = Array.isArray(page.features) ? page.features.length : 0;
+        if (!count) break;
+        collections.push(page);
+        offset += count;
+        loaded += count;
+        if (count < remaining) break;
+      }
+
+      return mergeFeatureCollections(collections);
+    }
+
+    async function fetchArcGisLayerCount(layerUrl, options = {}) {
+      const queryUrl = appendUrlPath(layerUrl, "query");
+      const spatialQuery = options.geometry ? {
+        geometry: options.geometry,
+        geometryType: options.geometryType || "esriGeometryEnvelope",
+        inSR: options.inSR || "4326",
+        spatialRel: options.spatialRel || "esriSpatialRelIntersects"
+      } : {};
+      const data = await fetchJson(appendQueryParams(queryUrl, {
+        where: options.where || "1=1",
+        returnCountOnly: "true",
+        f: "json",
+        ...spatialQuery
+      }));
+      if (data && data.error) throw new Error(data.error.message || "ArcGIS count query failed");
+      return Number(data && data.count) || 0;
+    }
+
+    async function fetchArcGisLayerExtent(layerUrl, options = {}) {
+      const queryUrl = appendUrlPath(layerUrl, "query");
+      const data = await fetchJson(appendQueryParams(queryUrl, {
+        where: options.where || "1=1",
+        returnExtentOnly: "true",
+        outSR: "4326",
+        f: "json"
+      }));
+      if (data && data.error) throw new Error(data.error.message || "ArcGIS extent query failed");
+      return data && data.extent ? data.extent : null;
+    }
+
+    async function importArcGisLayerUrl(layerUrl, options = {}) {
+      const info = await fetchArcGisJson(layerUrl);
+      const bucket = bucketFromArcGisGeometryType(info.geometryType);
+      if (!bucket) throw new Error("This ArcGIS layer does not expose supported feature geometry.");
+
+      const featureCollection = await fetchArcGisLayerGeoJson(layerUrl, {
+        info,
+        where: options.where,
+        maxFeatures: options.maxFeatures
+      });
+
+      const preferredName = safeName(options.name || info.name || inferOnlineDatasetName(layerUrl, "ArcGIS Layer"), "ArcGIS Layer");
+      const groupName = uniqueGroupName(preferredName);
+      ensureGroupExists(groupName, bucket);
+      state.datasetMeta[groupName].source = {
+        type: "arcgis-rest",
+        mode: "copy",
+        url: layerUrl,
+        where: options.where || "1=1"
+      };
+      state.datasetMeta[groupName].serviceInfo = {
+        name: info.name || groupName,
+        displayField: info.displayField || "",
+        geometryType: info.geometryType || ""
+      };
+
+      if (Array.isArray(featureCollection.features) && featureCollection.features.length) {
+        const layer = L.geoJSON(featureCollection);
+        registerLayersAsDataset(layer.getLayers(), groupName, {
+          group: groupName,
+          source: state.datasetMeta[groupName].source
+        });
+      }
+
+      return {
+        groupName,
+        count: Array.isArray(featureCollection.features) ? featureCollection.features.length : 0
+      };
+    }
+
+    async function importArcGisLiveLayerUrl(layerUrl, options = {}) {
+      const info = await fetchArcGisJson(layerUrl);
+      const bucket = bucketFromArcGisGeometryType(info.geometryType);
+      if (!bucket) throw new Error("This ArcGIS layer does not expose supported feature geometry.");
+
+      const preferredName = safeName(options.name || info.name || inferOnlineDatasetName(layerUrl, "ArcGIS Layer"), "ArcGIS Layer");
+      const groupName = uniqueGroupName(preferredName);
+      const totalCount = await fetchArcGisLayerCount(layerUrl, { where: options.where || "1=1" }).catch(() => null);
+      const extent4326 = await fetchArcGisLayerExtent(layerUrl, { where: options.where || "1=1" }).catch(() => null);
+
+      ensureGroupExists(groupName, bucket);
+      state.datasetMeta[groupName].source = {
+        type: "arcgis-rest",
+        mode: "live",
+        url: layerUrl,
+        where: options.where || "1=1",
+        fetchMode: options.fetchMode || "auto",
+        viewLimit: Number.isFinite(options.viewLimit) && options.viewLimit > 0 ? options.viewLimit : 4000
+      };
+      state.datasetMeta[groupName].serviceInfo = {
+        name: info.name || groupName,
+        displayField: info.displayField || "",
+        geometryType: info.geometryType || "",
+        extent4326
+      };
+      state.datasetMeta[groupName].liveStats = {
+        ...(state.datasetMeta[groupName].liveStats || {}),
+        totalCount: Number.isFinite(totalCount) ? totalCount : null,
+        loadedCount: 0,
+        visibleCount: 0,
+        fetchMode: options.fetchMode || "auto",
+        truncated: false
+      };
+
+      await createServerLayer(groupName, { throwOnError: true });
+      return {
+        groupName,
+        count: Number.isFinite(totalCount) ? totalCount : 0
+      };
+    }
+
+    async function chooseArcGisServiceLayers(serviceUrl, serviceInfo) {
+      const layers = Array.isArray(serviceInfo && serviceInfo.layers)
+        ? serviceInfo.layers.filter((layer) => Number.isInteger(layer.id) && (!Array.isArray(layer.subLayerIds) || !layer.subLayerIds.length) && !/group layer/i.test(String(layer.type || "")))
+        : [];
+      if (!layers.length) throw new Error("No ArcGIS sublayers were found at that service URL.");
+
+      const data = await modalForm(
+        "ArcGIS Service Layers",
+        `
+          <p class="modal-text">Select one or more layers to import from this service.</p>
+          <select id="serviceLayerSelect" class="field" multiple size="${Math.min(10, Math.max(4, layers.length))}">
+            ${layers.map((layer, index) => `<option value="${layer.id}" ${index === 0 ? "selected" : ""}>${layer.id} • ${escapeHtml(layer.name || `Layer ${layer.id}`)}</option>`).join("")}
+          </select>
+          <p class="tiny">Use Ctrl/Cmd or Shift to select multiple layers.</p>
+        `,
+        () => ({
+          ids: Array.from(document.getElementById("serviceLayerSelect").selectedOptions).map((option) => Number(option.value))
+        })
+      );
+
+      return data && Array.isArray(data.ids) ? data.ids.filter((id) => Number.isInteger(id)) : [];
+    }
+
+    async function importOnlineService() {
+      const data = await modalForm(
+        "Import Online Service",
+        `
+          <input id="serviceUrl" class="field" placeholder="ArcGIS layer/service URL or GeoJSON URL" />
+          <select id="serviceMode" class="field">
+            <option value="live">Read-only live layer (server-backed)</option>
+            <option value="copy">Editable copy</option>
+          </select>
+          <input id="serviceWhere" class="field" placeholder="ArcGIS WHERE filter" value="1=1" />
+          <select id="serviceFetchMode" class="field">
+            <option value="auto">Auto load in view (recommended)</option>
+            <option value="all-in-view">Load all features in current view</option>
+            <option value="cap">Cap features in current view</option>
+          </select>
+          <input id="serviceLimit" class="field" type="number" min="1" step="1" value="4000" />
+          <input id="serviceName" class="field" placeholder="Optional layer name override" />
+          <p class="tiny">Live mode keeps the data on the ArcGIS server and renders the current map view only. Use Auto for safe defaults, All In View for full current-extent loading, or Cap to enforce a maximum. Copy mode imports an editable local dataset.</p>
+        `,
+        () => ({
+          url: document.getElementById("serviceUrl").value.trim(),
+          mode: document.getElementById("serviceMode").value,
+          where: document.getElementById("serviceWhere").value.trim() || "1=1",
+          fetchMode: document.getElementById("serviceFetchMode").value || "auto",
+          maxFeatures: Number(document.getElementById("serviceLimit").value),
+          viewLimit: Number(document.getElementById("serviceLimit").value),
+          name: document.getElementById("serviceName").value.trim()
+        })
+      );
+      if (!data || !data.url) return;
+
+      try {
+        let imported = 0;
+
+        if (isArcGisLayerUrl(data.url)) {
+          const result = data.mode === "live"
+            ? await importArcGisLiveLayerUrl(data.url, data)
+            : await importArcGisLayerUrl(data.url, data);
+          imported += result.count;
+        } else if (isArcGisServiceRootUrl(data.url)) {
+          const serviceInfo = await fetchArcGisJson(data.url);
+          const selectedIds = await chooseArcGisServiceLayers(data.url, serviceInfo);
+          if (!selectedIds.length) return;
+
+          for (const layerId of selectedIds) {
+            const layerUrl = appendUrlPath(data.url, layerId);
+            const layerInfo = Array.isArray(serviceInfo.layers) ? serviceInfo.layers.find((layer) => layer.id === layerId) : null;
+            const result = await (data.mode === "live" ? importArcGisLiveLayerUrl : importArcGisLayerUrl)(layerUrl, {
+              ...data,
+              name: data.name ? `${data.name} ${safeName(layerInfo && layerInfo.name ? layerInfo.name : `Layer ${layerId}`, `Layer ${layerId}`)}` : ""
+            });
+            imported += result.count;
+          }
+        } else {
+          if (data.mode === "live") {
+            await modalInfo("Live Mode Unsupported", "Read-only live mode currently supports ArcGIS REST layer and service URLs. Use editable copy for GeoJSON URLs.");
+            return;
+          }
+          await importGeoJsonFromUrl(data.url, data.name);
+          return;
+        }
+
+        snapshot();
+        refreshLayers();
+        toast(data.mode === "live"
+          ? (imported ? `Live layer added (${imported}) • ${liveLayerFetchModeLabel(data.fetchMode)}` : `Live layer added • ${liveLayerFetchModeLabel(data.fetchMode)}`)
+          : (imported ? `Online layer imported (${imported})` : "Online layer imported"));
+      } catch (err) {
+        console.error(err);
+        modalInfo("Online Service Error", err.message || "Unable to import this online service.");
+      }
+    }
+
+    async function importGeoJsonFromUrl(url, preferredName = "") {
+      const payload = await fetchJson(url);
+      const featureCollection = payload && payload.type === "Feature"
+        ? { type: "FeatureCollection", features: [payload] }
+        : payload;
+      if (!featureCollection || featureCollection.type !== "FeatureCollection") {
+        throw new Error("This URL did not return GeoJSON feature data.");
+      }
+
+      const groupName = uniqueGroupName(preferredName || inferOnlineDatasetName(url, "GeoJSON Layer"));
+      const layer = L.geoJSON(featureCollection);
+      registerLayersAsDataset(layer.getLayers(), groupName, { source: { type: "geojson-url", url } });
+      snapshot();
+      refreshLayers();
+      toast(`GeoJSON URL imported (${featureCollection.features.length || 0})`);
+    }
+
+    async function importGeoJsonUrlPrompt() {
+      const data = await modalForm(
+        "Import GeoJSON URL",
+        `
+          <input id="geoJsonUrl" class="field" placeholder="https://example.com/data.geojson" />
+          <input id="geoJsonLayerName" class="field" placeholder="Optional layer name override" />
+        `,
+        () => ({
+          url: document.getElementById("geoJsonUrl").value.trim(),
+          name: document.getElementById("geoJsonLayerName").value.trim()
+        })
+      );
+      if (!data || !data.url) return;
+
+      try {
+        await importGeoJsonFromUrl(data.url, data.name);
+      } catch (err) {
+        console.error(err);
+        modalInfo("GeoJSON URL Error", err.message || "Unable to import this GeoJSON URL.");
+      }
+    }
+
     function importGeoFile(file) {
       if (!file) return;
       const name = file.name.toLowerCase();
+      const baseName = importBaseName(file.name);
       const reader = new FileReader();
 
       const finishAdd = (group) => {
-        group.eachLayer((layer) => {
-          state.drawn.addLayer(layer);
-          registerLayer(
-            layer,
-            (layer.feature && layer.feature.properties && (layer.feature.properties.name || layer.feature.properties.Name || layer.feature.properties.title)) || null
-          );
-        });
+        registerLayersAsDataset(group.getLayers(), uniqueGroupName(baseName));
         snapshot();
         refreshLayers();
         toast("Geo data imported");
@@ -4002,6 +6107,8 @@
 
     function importCsvFile(file) {
       if (!file) return;
+      const groupName = uniqueGroupName(importBaseName(file.name));
+
       const importRows = (rows, latField, lngField) => {
         let count = 0;
         rows.forEach((row, index) => {
@@ -4015,7 +6122,7 @@
             if (field === latField || field === lngField || value == null || value === "") return;
             props[field] = value;
           });
-          registerLayer(marker, safeName(label, "CSV Point"));
+          registerLayer(marker, safeName(label, "CSV Point"), { group: groupName });
           count += 1;
         });
         return count;
@@ -4033,7 +6140,7 @@
               if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
               const label = String(row[2] || `CSV Point ${index + 1}`);
               const marker = L.marker([lat, lng]).bindPopup(label).addTo(state.drawn);
-              registerLayer(marker, safeName(label, "CSV Point"));
+              registerLayer(marker, safeName(label, "CSV Point"), { group: groupName });
               count += 1;
             });
             if (!count) {
@@ -4074,15 +6181,13 @@
 
     function importShapefile(file) {
       if (!file) return;
+      const baseName = importBaseName(file.name);
       const reader = new FileReader();
       reader.onload = async (event) => {
         try {
           const geo = await shp(event.target.result);
           const layer = L.geoJSON(geo);
-          layer.eachLayer((l) => {
-            state.drawn.addLayer(l);
-            registerLayer(l, (l.feature && l.feature.properties && (l.feature.properties.name || l.feature.properties.Name)) || "SHP Feature");
-          });
+          registerLayersAsDataset(layer.getLayers(), uniqueGroupName(baseName));
           snapshot();
           refreshLayers();
           toast("Shapefile imported");
@@ -4096,6 +6201,7 @@
 
     function importSpreadsheet(file) {
       if (!file) return;
+      const groupName = uniqueGroupName(importBaseName(file.name));
       const reader = new FileReader();
       reader.onload = (event) => {
         try {
@@ -4121,7 +6227,7 @@
                   if (field === latField || field === lngField || value === "") return;
                   props[field] = value;
                 });
-                registerLayer(marker, safeName(label, "Sheet Point"));
+                registerLayer(marker, safeName(label, "Sheet Point"), { group: groupName });
                 count += 1;
               });
             }
@@ -4136,7 +6242,7 @@
               if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
               const label = String(row[2] || `Sheet Point ${index + 1}`);
               const marker = L.marker([lat, lng]).bindPopup(label).addTo(state.drawn);
-              registerLayer(marker, safeName(label, "Sheet Point"));
+              registerLayer(marker, safeName(label, "Sheet Point"), { group: groupName });
               count += 1;
             });
           }
@@ -4157,16 +6263,32 @@
     }
 
     async function createGroup() {
-      const name = await modalPrompt("Create Group Folder", "Group name", "e.g. Sales Regions", "");
-      if (!name) return;
-      const n = safeName(name, "Default");
-      if (!state.groups.includes(n)) {
-        state.groups.push(n);
-        refreshTargetOptions();
-        toast("Group created");
-      } else {
-        toast("Group already exists");
+      const data = await modalForm(
+        "Create Layer",
+        `
+          <input id="newLayerName" class="field" placeholder="Layer name" />
+          <select id="newLayerType" class="field">
+            <option value="point">Point Layer</option>
+            <option value="line">Line Layer</option>
+            <option value="polygon">Polygon Layer</option>
+          </select>
+        `,
+        () => ({
+          name: document.getElementById("newLayerName").value.trim(),
+          type: document.getElementById("newLayerType").value
+        })
+      );
+      if (!data || !data.name) return;
+      const requestedName = safeName(data.name, defaultGroupNameForBucket(data.type));
+      const name = state.groups.includes(requestedName) ? uniqueGroupName(requestedName) : requestedName;
+      ensureGroupExists(name, data.type);
+      state.featureTargets[data.type] = name;
+      try {
+        localStorage.setItem("mapdash-feature-targets", JSON.stringify(state.featureTargets));
+      } catch (_) {
       }
+      refreshLayers();
+      toast(`Layer created: ${name}`);
     }
 
     async function applyFilter() {
@@ -4182,7 +6304,7 @@
       if (!data || !data.field || !data.value) return;
 
       let visible = 0;
-      state.drawn.eachLayer((layer) => {
+      featureLayers().forEach((layer) => {
         if (!isFeatureLayer(layer)) return;
         const val = String(layerAttributeValue(layer, data.field) || "").toLowerCase();
         const pass = val.includes(data.value);
@@ -4284,7 +6406,10 @@
 
       state.map.on("pm:remove", (e) => {
         const removed = e && e.layer ? e.layer : null;
-        if (removed) delete state.layerMeta[layerKey(removed)];
+        if (removed) {
+          applySelectionOperation([removed], "remove", { silent: true });
+          delete state.layerMeta[layerKey(removed)];
+        }
         snapshot();
         refreshLayers();
       });
@@ -4329,7 +6454,7 @@
         if (!el) return;
         el.addEventListener("change", () => {
           applyFeatureTargets();
-          toast("Feature targets updated");
+          toast("Layer targets updated");
         });
       });
 
@@ -4378,6 +6503,8 @@
       document.getElementById("importCsvBtn").addEventListener("click", () => csvInput.click());
       document.getElementById("importShpBtn").addEventListener("click", () => shpInput.click());
       document.getElementById("importXlsBtn").addEventListener("click", () => xlsInput.click());
+      document.getElementById("importServiceBtn").addEventListener("click", importOnlineService);
+      document.getElementById("importGeoUrlBtn").addEventListener("click", importGeoJsonUrlPrompt);
 
       geoInput.addEventListener("change", (e) => importGeoFile(e.target.files[0]));
       csvInput.addEventListener("change", (e) => importCsvFile(e.target.files[0]));
@@ -4388,6 +6515,18 @@
       document.getElementById("heatBtn").addEventListener("click", generateHeat);
       document.getElementById("attributeTableBtn").addEventListener("click", () => openAttributeTable("all"));
       document.getElementById("fieldManagerBtn").addEventListener("click", () => openFieldManager("all"));
+      document.getElementById("selectAttributeBtn").addEventListener("click", selectByAttribute);
+      document.getElementById("selectLocationBtn").addEventListener("click", selectByLocation);
+      document.getElementById("selectInteractiveBtn").addEventListener("click", startInteractiveSelection);
+      document.getElementById("selectBoxBtn").addEventListener("click", startBoxSelection);
+      document.getElementById("selectPolygonBtn").addEventListener("click", startPolygonSelection);
+      document.getElementById("selectRadiusBtn").addEventListener("click", selectByRadius);
+      document.getElementById("clearSelectionBtn").addEventListener("click", () => clearSelection());
+      document.getElementById("invertSelectionBtn").addEventListener("click", () => invertSelection("all"));
+      document.getElementById("zoomSelectionBtn").addEventListener("click", zoomToSelection);
+      document.getElementById("selectionTableBtn").addEventListener("click", () => openAttributeTable("selected"));
+      document.getElementById("selectionStatsBtn").addEventListener("click", openSelectionSummary);
+      document.getElementById("copySelectionBtn").addEventListener("click", copySelectedToLayer);
       document.getElementById("clearHeatBtn").addEventListener("click", clearHeat);
 
       document.getElementById("areaDistanceBtn").addEventListener("click", runAreaDistance);
@@ -4453,6 +6592,7 @@
           modalClose();
           toggleFab(false);
           toggleLayerDrawer(false);
+          stopSelectionTool({ silent: true });
           endCustomTool();
           if (state.measureMode) toggleMeasure();
           setPanel(false);
@@ -4466,6 +6606,8 @@
       window.addEventListener("resize", updateScrim);
       state.map.on("moveend", refreshGrid);
       state.map.on("zoomend", refreshGrid);
+      state.map.on("moveend", scheduleServerLayerRefresh);
+      state.map.on("zoomend", scheduleServerLayerRefresh);
 
       document.addEventListener("click", (e) => {
         const target = e.target;
